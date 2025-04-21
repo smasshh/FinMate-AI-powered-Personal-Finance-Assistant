@@ -1,21 +1,7 @@
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card";
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  CreditCard, 
-  ArrowRight,
-  Wallet,
-  LineChart,
-  Brain
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+
+import { FinancialSummaryCards } from "@/components/dashboard/FinancialSummaryCards";
+import { BudgetOverview } from "@/components/dashboard/BudgetOverview";
+import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
 import { FinancialInsights } from "@/components/FinancialInsights";
 
 // Demo data (will be replaced with actual data from Supabase later)
@@ -48,131 +34,18 @@ const Dashboard = () => {
         <p className="text-muted-foreground">Get a quick overview of your finances</p>
       </div>
       
-      {/* Financial summary cards */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Balance</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${financialSummary.totalBalance.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Across all accounts
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Cash Flow</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-finance-green">
-              +${(financialSummary.monthlyIncome - financialSummary.monthlyExpenses).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Income vs Expenses
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Investments</CardTitle>
-            <LineChart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${financialSummary.investmentValue.toLocaleString()}</div>
-            <div className="flex items-center pt-1">
-              <span className={`text-xs ${financialSummary.investmentChange >= 0 ? 'text-finance-green' : 'text-finance-red'} flex items-center`}>
-                {financialSummary.investmentChange >= 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                {Math.abs(financialSummary.investmentChange)}% this month
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Credit Score</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{financialSummary.creditScore}</div>
-            <p className="text-xs text-muted-foreground">
-              Excellent score range
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <FinancialSummaryCards 
+        totalBalance={financialSummary.totalBalance}
+        monthlyIncome={financialSummary.monthlyIncome}
+        monthlyExpenses={financialSummary.monthlyExpenses}
+        investmentValue={financialSummary.investmentValue}
+        investmentChange={financialSummary.investmentChange}
+        creditScore={financialSummary.creditScore}
+      />
       
-      {/* Budget Overview */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Budget Overview</CardTitle>
-            <CardDescription>Your spending compared to budget</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {financialSummary.budgetCategories.map((category) => (
-                <div key={category.name} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{category.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      ${category.spent} of ${category.budget}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${
-                        category.percentage > 100 ? 'bg-finance-red' : 'bg-finance-blue'
-                      }`}
-                      style={{ width: `${Math.min(category.percentage, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-6">
-              <Button variant="outline" size="sm" className="w-full">
-                <span>View All Categories</span>
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Recent Transactions */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Recent Transactions</CardTitle>
-            <CardDescription>Your latest financial activity</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {financialSummary.recentTransactions.map((transaction) => (
-                <div key={transaction.id} className="flex items-center justify-between border-b border-gray-100 pb-3">
-                  <div>
-                    <p className="text-sm font-medium">{transaction.name}</p>
-                    <p className="text-xs text-muted-foreground">{transaction.date} • {transaction.category}</p>
-                  </div>
-                  <div className={`font-medium ${transaction.amount > 0 ? 'text-finance-green' : ''}`}>
-                    {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4">
-              <Button variant="outline" size="sm" className="w-full">
-                <span>View All Transactions</span>
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <BudgetOverview categories={financialSummary.budgetCategories} />
+        <RecentTransactions transactions={financialSummary.recentTransactions} />
       </div>
       
       <FinancialInsights />
