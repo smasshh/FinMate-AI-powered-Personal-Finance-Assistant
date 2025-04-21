@@ -1,9 +1,11 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const useBudgets = () => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const getBudgets = async () => {
     const { data, error } = await supabase
@@ -22,9 +24,12 @@ export const useBudgets = () => {
 
   const addBudget = useMutation({
     mutationFn: async (budget: { category: string; amount: number; start_date: string; end_date: string }) => {
+      if (!user) throw new Error("User not authenticated");
+      
       const { data, error } = await supabase
         .from('budgets')
-        .insert([budget])
+        .insert([{ ...budget, user_id: user.id }])
+        .select()
         .single();
       
       if (error) throw error;
