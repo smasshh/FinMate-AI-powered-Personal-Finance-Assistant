@@ -4,27 +4,26 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { signIn } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     setIsLoading(true);
     
-    // Here we'll connect to Supabase auth when it's integrated
-    // For now, simulate loading
-    setTimeout(() => {
+    try {
+      await signIn(email, password);
+    } catch (error) {
+      console.error(error);
+    } finally {
       setIsLoading(false);
-      // Later will redirect to dashboard once auth is implemented
-      console.log("Login attempted with:", { email, password, rememberMe });
-    }, 1500);
+    }
   };
 
   return (
@@ -74,17 +73,6 @@ const Login = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-              />
-              <Label htmlFor="remember" className="text-sm font-normal">
-                Remember me for 30 days
-              </Label>
             </div>
             
             <Button type="submit" className="w-full" disabled={isLoading}>

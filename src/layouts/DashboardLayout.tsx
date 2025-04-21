@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { 
   BarChart3, 
@@ -11,9 +10,9 @@ import {
   Settings,
   Bell,
   LogOut,
-  Menu,
-  X
+  Menu
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
@@ -25,7 +24,8 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Dialog } from "@/components/ui/dialog"; // Import Dialog
+import { Dialog } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
 
 const navItems = [
   { 
@@ -96,11 +96,37 @@ const SideNav = ({ className = "" }: SideNavProps) => {
 const DashboardLayout = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const { user, signOut } = useAuth();
+  const [profile, setProfile] = useState<any>(null);
   
-  const handleLogout = () => {
-    // This will be connected to Supabase Auth later
-    console.log("Logging out...");
-    navigate("/");
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user]);
+
+  const fetchProfile = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user?.id)
+        .single();
+      
+      if (error) throw error;
+      setProfile(data);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   return (
@@ -143,13 +169,13 @@ const DashboardLayout = () => {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src="https://github.com/shadcn.png" alt="User" />
-                      <AvatarFallback>JD</AvatarFallback>
+                      <AvatarImage src={profile?.avatar_url || ''} alt={profile?.full_name || 'User'} />
+                      <AvatarFallback>{profile?.full_name?.split(' ').map((n: string) => n[0]).join('') || 'U'}</AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuLabel>{profile?.full_name || 'My Account'}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <User className="mr-2 h-4 w-4" />

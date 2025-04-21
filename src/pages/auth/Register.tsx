@@ -4,33 +4,27 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Register = () => {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [agreeTerms, setAgreeTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { signUp } = useAuth();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!agreeTerms) {
-      alert("You must agree to the terms and conditions");
-      return;
-    }
-    
     setIsLoading(true);
     
-    // Here we'll connect to Supabase auth when it's integrated
-    // For now, simulate loading
-    setTimeout(() => {
+    try {
+      await signUp(email, password, fullName);
+    } catch (error) {
+      console.error(error);
+    } finally {
       setIsLoading(false);
-      // Later will redirect to dashboard once auth is implemented
-      console.log("Registration attempted with:", { fullName, email, password });
-    }, 1500);
+    }
   };
 
   return (
@@ -88,29 +82,11 @@ const Register = () => {
                 minLength={8}
               />
               <p className="text-xs text-gray-500">
-                Must contain at least 8 characters including a number and a special character
+                Must contain at least 8 characters
               </p>
             </div>
             
-            <div className="flex items-start space-x-2">
-              <Checkbox 
-                id="terms"
-                checked={agreeTerms}
-                onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
-              />
-              <Label htmlFor="terms" className="text-sm font-normal leading-tight">
-                I agree to the{" "}
-                <Link to="/terms" className="text-finance-blue hover:underline">
-                  Terms of Service
-                </Link>{" "}
-                and{" "}
-                <Link to="/privacy" className="text-finance-blue hover:underline">
-                  Privacy Policy
-                </Link>
-              </Label>
-            </div>
-            
-            <Button type="submit" className="w-full" disabled={isLoading || !agreeTerms}>
+            <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? "Creating account..." : "Create account"}
             </Button>
           </div>
