@@ -9,6 +9,162 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      budgets: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          end_date: string
+          id: string
+          start_date: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          end_date: string
+          id?: string
+          start_date: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          end_date?: string
+          id?: string
+          start_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      chat_history: {
+        Row: {
+          chat_type: string
+          created_at: string
+          id: string
+          message: string
+          response: string
+          user_id: string
+        }
+        Insert: {
+          chat_type: string
+          created_at?: string
+          id?: string
+          message: string
+          response: string
+          user_id: string
+        }
+        Update: {
+          chat_type?: string
+          created_at?: string
+          id?: string
+          message?: string
+          response?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      credit_score: {
+        Row: {
+          age: number
+          annual_income: number
+          created_at: string
+          credit_utilization: number
+          existing_loans: number
+          id: string
+          payment_history: number
+          predicted_score: number
+          prediction_date: string
+          user_id: string
+        }
+        Insert: {
+          age: number
+          annual_income: number
+          created_at?: string
+          credit_utilization: number
+          existing_loans: number
+          id?: string
+          payment_history: number
+          predicted_score: number
+          prediction_date?: string
+          user_id: string
+        }
+        Update: {
+          age?: number
+          annual_income?: number
+          created_at?: string
+          credit_utilization?: number
+          existing_loans?: number
+          id?: string
+          payment_history?: number
+          predicted_score?: number
+          prediction_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      portfolio: {
+        Row: {
+          created_at: string
+          id: string
+          purchase_date: string
+          purchase_price: number
+          quantity: number
+          stock_symbol: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          purchase_date: string
+          purchase_price: number
+          quantity: number
+          stock_symbol: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          purchase_date?: string
+          purchase_price?: number
+          quantity?: number
+          stock_symbol?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -30,6 +186,57 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      stock_predictions: {
+        Row: {
+          confidence_score: number
+          created_at: string
+          id: string
+          predicted_price: number
+          prediction_date: string
+          stock_symbol: string
+          user_id: string
+        }
+        Insert: {
+          confidence_score: number
+          created_at?: string
+          id?: string
+          predicted_price: number
+          prediction_date: string
+          stock_symbol: string
+          user_id: string
+        }
+        Update: {
+          confidence_score?: number
+          created_at?: string
+          id?: string
+          predicted_price?: number
+          prediction_date?: string
+          stock_symbol?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stock_watchlist: {
+        Row: {
+          added_at: string
+          id: string
+          stock_symbol: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          id?: string
+          stock_symbol: string
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          id?: string
+          stock_symbol?: string
+          user_id?: string
         }
         Relationships: []
       }

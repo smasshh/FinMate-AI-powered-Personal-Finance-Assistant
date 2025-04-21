@@ -1,16 +1,18 @@
+
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { 
-  BarChart3, 
-  CreditCard, 
-  LineChart, 
+  LayoutDashboard, 
+  DollarSign, 
+  Wallet, 
   TrendingUp, 
+  LineChart,
+  CreditCard,
   Brain,
-  User,
+  MessageSquare,
   Settings,
-  Bell,
-  LogOut,
-  Menu
+  User,
+  LogOut
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -29,29 +31,44 @@ import { supabase } from "@/integrations/supabase/client";
 
 const navItems = [
   { 
-    icon: <BarChart3 className="h-5 w-5" />, 
+    icon: <LayoutDashboard className="h-5 w-5" />, 
     label: "Dashboard", 
     path: "/dashboard" 
   },
   { 
-    icon: <CreditCard className="h-5 w-5" />, 
+    icon: <DollarSign className="h-5 w-5" />, 
     label: "Expenses", 
     path: "/dashboard/expenses" 
   },
   { 
+    icon: <Wallet className="h-5 w-5" />, 
+    label: "Budget", 
+    path: "/dashboard/budget" 
+  },
+  { 
     icon: <TrendingUp className="h-5 w-5" />, 
-    label: "Investments", 
-    path: "/dashboard/investments" 
+    label: "Stock Predictions", 
+    path: "/dashboard/stock-predictions" 
   },
   { 
     icon: <LineChart className="h-5 w-5" />, 
-    label: "Credit Score", 
-    path: "/dashboard/credit-score" 
+    label: "Portfolio", 
+    path: "/dashboard/portfolio" 
   },
   { 
     icon: <Brain className="h-5 w-5" />, 
-    label: "AI Assistant", 
-    path: "/dashboard/ai-assistant" 
+    label: "AI Trading", 
+    path: "/dashboard/ai-trading" 
+  },
+  { 
+    icon: <MessageSquare className="h-5 w-5" />, 
+    label: "ChatBot", 
+    path: "/dashboard/chatbot" 
+  },
+  { 
+    icon: <CreditCard className="h-5 w-5" />, 
+    label: "Credit Score", 
+    path: "/dashboard/credit-score" 
   }
 ];
 
@@ -160,11 +177,6 @@ const DashboardLayout = () => {
             </div>
             
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-              </Button>
-              
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -177,11 +189,11 @@ const DashboardLayout = () => {
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>{profile?.full_name || 'My Account'}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/dashboard/profile')}>
                     <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate('/dashboard/settings')}>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </DropdownMenuItem>
