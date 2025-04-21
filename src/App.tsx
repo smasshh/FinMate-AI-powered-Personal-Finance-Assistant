@@ -16,35 +16,38 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
+// Wrap the entire application in a function component to ensure hooks are used in a valid context
+const App = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            
-            {/* Dashboard routes */}
-            <Route path="/dashboard" element={<DashboardLayout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="expenses" element={<Placeholder title="Expense Tracking" description="Monitor and categorize your spending" />} />
-              <Route path="investments" element={<Placeholder title="Investment Portfolio" description="Track and manage your investments" />} />
-              <Route path="credit-score" element={<Placeholder title="Credit Score" description="Monitor and improve your credit score" />} />
-              <Route path="ai-assistant" element={<Placeholder title="AI Assistant" description="Get personalized financial advice" />} />
-            </Route>
-            
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              
+              {/* Dashboard routes */}
+              <Route path="/dashboard" element={<DashboardLayout />}>
+                <Route index element={<Dashboard />} />
+                <Route path="expenses" element={<Placeholder title="Expense Tracking" description="Monitor and categorize your spending" />} />
+                <Route path="investments" element={<Placeholder title="Investment Portfolio" description="Track and manage your investments" />} />
+                <Route path="credit-score" element={<Placeholder title="Credit Score" description="Monitor and improve your credit score" />} />
+                <Route path="ai-assistant" element={<Placeholder title="AI Assistant" description="Get personalized financial advice" />} />
+              </Route>
+              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </TooltipProvider>
         </AuthProvider>
       </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+    </QueryClientProvider>
+  );
+};
 
 export default App;
