@@ -24,7 +24,8 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Dialog } from "@/components/ui/dialog"; // Import Dialog
 
 const navItems = [
   { 
@@ -108,22 +109,24 @@ const DashboardLayout = () => {
       <SideNav className="w-64 hidden md:block" />
       
       {/* Mobile Sidebar */}
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent side="left" className="p-0">
-          <SideNav className="w-full" />
-        </SheetContent>
-      </Sheet>
+      <Dialog>
+        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <SheetContent side="left" className="p-0">
+            <SideNav className="w-full" />
+          </SheetContent>
+        </Sheet>
+      </Dialog>
       
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top navigation */}
         <header className="bg-white border-b border-gray-200">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center md:hidden">
-              <SheetTrigger asChild onClick={() => setIsOpen(true)}>
-                <Button variant="ghost" size="icon">
+              <Dialog>
+                <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)}>
                   <Menu className="h-5 w-5" />
                 </Button>
-              </SheetTrigger>
+              </Dialog>
               <div className="ml-2 flex items-center">
                 <div className="w-6 h-6 rounded bg-finance-blue text-white flex items-center justify-center font-bold text-sm mr-1">F</div>
                 <span className="text-lg font-bold text-gray-900">FinMate</span>
