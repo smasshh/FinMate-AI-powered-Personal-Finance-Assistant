@@ -12,7 +12,8 @@ import {
   MessageSquare,
   Settings,
   User,
-  LogOut
+  LogOut,
+  Menu as MenuIcon
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -167,7 +168,7 @@ const DashboardLayout = () => {
             <div className="flex items-center md:hidden">
               <Dialog>
                 <Button variant="ghost" size="icon" onClick={() => setIsOpen(true)}>
-                  <Menu className="h-5 w-5" />
+                  <MenuIcon className="h-5 w-5" />
                 </Button>
               </Dialog>
               <div className="ml-2 flex items-center">

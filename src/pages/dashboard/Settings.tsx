@@ -117,4 +117,4 @@ const Settings = () => {
   );
 };
 
-export default Profile;
+export default Settings;
