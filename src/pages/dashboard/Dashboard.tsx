@@ -1,4 +1,3 @@
-
 import { 
   Card, 
   CardContent, 
@@ -17,6 +16,7 @@ import {
   Brain
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FinancialInsights } from "@/components/FinancialInsights";
 
 // Demo data (will be replaced with actual data from Supabase later)
 const financialSummary = {
@@ -175,44 +175,7 @@ const Dashboard = () => {
         </Card>
       </div>
       
-      {/* AI Financial Insights */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Brain className="h-5 w-5 mr-2 text-finance-blue" />
-            AI Financial Insights
-          </CardTitle>
-          <CardDescription>Personalized recommendations based on your financial data</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-              <h3 className="font-medium text-finance-blue mb-1">Spending Alert</h3>
-              <p className="text-sm text-gray-700">
-                You've spent 16% more on Entertainment than your monthly budget. Consider reducing discretionary spending for the rest of the month.
-              </p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg border border-green-100">
-              <h3 className="font-medium text-finance-green mb-1">Savings Opportunity</h3>
-              <p className="text-sm text-gray-700">
-                Based on your cash flow, you could increase your investment contributions by $200 monthly without impacting your lifestyle.
-              </p>
-            </div>
-            <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
-              <h3 className="font-medium text-finance-gold mb-1">Goal Progress</h3>
-              <p className="text-sm text-gray-700">
-                You're 65% of the way to your emergency fund goal. At your current saving rate, you'll reach your target in 3 months.
-              </p>
-            </div>
-          </div>
-          <div className="mt-6">
-            <Button variant="outline" size="sm" className="w-full">
-              <span>Get More Insights</span>
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <FinancialInsights />
     </div>
   );
 };
