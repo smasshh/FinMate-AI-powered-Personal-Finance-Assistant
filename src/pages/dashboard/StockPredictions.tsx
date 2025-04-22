@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,18 +11,42 @@ import { StockWatchlist } from '@/components/stocks/StockWatchlist';
 import { StockNews } from '@/components/stocks/StockNews';
 import { StockMarketData } from '@/components/stocks/StockMarketData';
 import { StockPredictions as AIStockPredictions } from '@/components/stocks/StockPredictions';
+import { useToast } from '@/hooks/use-toast';
 
 const StockPredictions = () => {
   const [activeTab, setActiveTab] = useState('watchlist');
-  const { loading, fetchStockData, fetchStockNews } = useStockData();
+  const { loading, fetchStockData, fetchStockNews, fetchMarketIndices } = useStockData();
+  const { toast } = useToast();
 
-  const handleRefresh = () => {
-    // Refresh market data
-    fetchStockData('NIFTY50');
-    fetchStockData('SENSEX');
-    fetchStockData('NIFTYBANK');
-    fetchStockData('NIFTYIT');
-    fetchStockNews();
+  useEffect(() => {
+    // Fetch market indices on load
+    fetchMarketIndices();
+  }, []);
+
+  const handleRefresh = async () => {
+    toast({
+      title: 'Refreshing Market Data',
+      description: 'Updating stock prices and news...',
+    });
+    
+    try {
+      // Refresh market indices
+      await fetchMarketIndices();
+      
+      // Refresh market news
+      await fetchStockNews();
+      
+      toast({
+        title: 'Data Refreshed',
+        description: 'Market data has been updated.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Refresh Failed',
+        description: 'Could not update all market data. Try again later.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -37,9 +61,8 @@ const StockPredictions = () => {
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleRefresh} disabled={loading}>
             <RefreshCcw className="w-4 h-4 mr-2" />
-            Refresh Prices
+            Refresh Data
           </Button>
-          <Button>Generate Predictions</Button>
         </div>
       </div>
 

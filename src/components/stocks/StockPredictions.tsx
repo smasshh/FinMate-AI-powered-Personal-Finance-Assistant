@@ -8,6 +8,7 @@ import { useStockData } from '@/hooks/useStockData';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export const StockPredictions = () => {
   const [selectedStock, setSelectedStock] = useState<string>('');
@@ -15,7 +16,10 @@ export const StockPredictions = () => {
   const [predictions, setPredictions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { user } = useAuth();
+  const { generatePrediction } = useStockData();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (user) {
@@ -48,6 +52,7 @@ export const StockPredictions = () => {
     
     try {
       setLoading(true);
+      setErrorMessage(null);
       
       const { data, error } = await supabase
         .from('stock_predictions')
@@ -58,34 +63,71 @@ export const StockPredictions = () => {
       if (error) throw error;
       
       setPredictions(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching predictions:', error);
+      setErrorMessage('Failed to load predictions. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const generatePrediction = async () => {
+  const isIndianStock = (symbol: string) => {
+    return symbol.endsWith('.BSE') || 
+           symbol.endsWith('.NSE') || 
+           symbol.includes('.NS') || 
+           symbol.includes('NIFTY') || 
+           symbol.includes('SENSEX');
+  };
+
+  const formatCurrency = (value: number, symbol: string) => {
+    if (isIndianStock(symbol)) {
+      // Format in Indian style (e.g. ₹1,00,000.00)
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+    } else {
+      // Format in US style (e.g. $100,000.00)
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+    }
+  };
+
+  const handleGeneratePrediction = async () => {
     if (!selectedStock || !user) return;
     
     try {
       setGenerating(true);
+      setErrorMessage(null);
       
-      // First, fetch historical data
-      const response = await supabase.functions.invoke('stock-data', {
-        body: JSON.stringify({ 
-          action: 'GENERATE_PREDICTION', 
-          symbol: selectedStock,
-          userId: user.id
-        })
-      });
-
-      if (response.error) throw new Error(response.error.message);
+      const result = await generatePrediction(selectedStock);
       
-      // Refresh predictions after generation
-      fetchPredictions();
+      if (result.error) {
+        setErrorMessage(`Failed to generate prediction: ${result.error}`);
+        toast({
+          title: 'Prediction Failed',
+          description: result.error,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Prediction Generated',
+          description: `Successfully created prediction for ${selectedStock}`,
+          variant: 'default',
+        });
+        
+        // Refresh predictions after generation
+        fetchPredictions();
+      }
     } catch (error: any) {
       console.error('Error generating prediction:', error);
+      setErrorMessage(`Failed to generate prediction: ${error.message}`);
     } finally {
       setGenerating(false);
     }
@@ -131,7 +173,7 @@ export const StockPredictions = () => {
           </div>
           <div className="flex items-end">
             <Button 
-              onClick={generatePrediction} 
+              onClick={handleGeneratePrediction} 
               disabled={generating || !selectedStock}
               className="w-full md:w-auto"
             >
@@ -146,6 +188,12 @@ export const StockPredictions = () => {
             </Button>
           </div>
         </div>
+
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            <p>{errorMessage}</p>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center items-center h-64">
@@ -185,11 +233,15 @@ export const StockPredictions = () => {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                           <div>
                             <p className="text-sm text-muted-foreground">Current Price</p>
-                            <p className="text-lg font-medium">${prediction.current_price?.toFixed(2)}</p>
+                            <p className="text-lg font-medium">
+                              {formatCurrency(prediction.current_price || 0, prediction.stock_symbol)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-sm text-muted-foreground">Predicted Price</p>
-                            <p className="text-lg font-medium">${prediction.predicted_price?.toFixed(2)}</p>
+                            <p className="text-lg font-medium">
+                              {formatCurrency(prediction.predicted_price || 0, prediction.stock_symbol)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-sm text-muted-foreground">Prediction Date</p>
@@ -243,11 +295,15 @@ export const StockPredictions = () => {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                           <div>
                             <p className="text-sm text-muted-foreground">Current Price</p>
-                            <p className="text-lg font-medium">${prediction.current_price?.toFixed(2)}</p>
+                            <p className="text-lg font-medium">
+                              {formatCurrency(prediction.current_price || 0, prediction.stock_symbol)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-sm text-muted-foreground">Predicted Price</p>
-                            <p className="text-lg font-medium">${prediction.predicted_price?.toFixed(2)}</p>
+                            <p className="text-lg font-medium">
+                              {formatCurrency(prediction.predicted_price || 0, prediction.stock_symbol)}
+                            </p>
                           </div>
                           <div>
                             <p className="text-sm text-muted-foreground">Prediction Date</p>

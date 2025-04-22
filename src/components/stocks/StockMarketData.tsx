@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { useStockData } from '@/hooks/useStockData';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Legend, AreaChart, Area 
@@ -17,7 +17,8 @@ export const StockMarketData = () => {
   const [timeframe, setTimeframe] = useState<string>('daily');
   const [watchlistStocks, setWatchlistStocks] = useState<any[]>([]);
   const [stockData, setStockData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { loading, fetchStockData } = useStockData();
   const { user } = useAuth();
 
   useEffect(() => {
@@ -45,53 +46,62 @@ export const StockMarketData = () => {
     }
   };
 
-  const fetchStockData = async () => {
+  const isIndianStock = (symbol: string) => {
+    return symbol.endsWith('.BSE') || 
+           symbol.endsWith('.NSE') || 
+           symbol.includes('.NS') || 
+           symbol.includes('NIFTY') || 
+           symbol.includes('SENSEX');
+  };
+
+  const getCurrencySymbol = (symbol: string) => {
+    return isIndianStock(symbol) ? '₹' : '$';
+  };
+
+  const fetchStockDataWithRetry = async () => {
     if (!selectedStock) return;
     
-    try {
-      setLoading(true);
-      
-      const response = await supabase.functions.invoke('stock-data', {
-        body: JSON.stringify({ 
-          action: timeframe === 'daily' ? 'DAILY_PRICES' : 
-                  timeframe === 'weekly' ? 'WEEKLY_PRICES' : 'MONTHLY_PRICES', 
-          symbol: selectedStock 
-        })
-      });
-
-      if (response.error) throw new Error(response.error.message);
-      
-      // Process data for charts
-      const timeSeriesKey = 
-        timeframe === 'daily' ? 'Time Series (Daily)' : 
-        timeframe === 'weekly' ? 'Weekly Time Series' : 'Monthly Time Series';
-      
-      const timeSeries = response.data?.[timeSeriesKey] || {};
-      
-      const chartData = Object.entries(timeSeries).map(([date, values]: [string, any]) => ({
-        date,
-        open: parseFloat(values['1. open']),
-        high: parseFloat(values['2. high']),
-        low: parseFloat(values['3. low']),
-        close: parseFloat(values['4. close']),
-        volume: parseFloat(values['5. volume']),
-      })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-      setStockData({
-        symbol: selectedStock,
-        timeframe,
-        chartData: chartData.slice(-90) // Last 90 data points
-      });
-    } catch (error: any) {
-      console.error('Error fetching stock data:', error);
-    } finally {
-      setLoading(false);
+    setErrorMessage(null);
+    const data = await fetchStockData(selectedStock, timeframe);
+    
+    if (!data) {
+      setErrorMessage(`Could not fetch data for ${selectedStock}. The API may have reached its quota limit.`);
+      setStockData(null);
+      return;
     }
+    
+    // Process data for charts
+    const timeSeriesKey = 
+      timeframe === 'daily' ? 'Time Series (Daily)' : 
+      timeframe === 'weekly' ? 'Weekly Time Series' : 'Monthly Time Series';
+    
+    const timeSeries = data[timeSeriesKey] || {};
+    
+    if (!timeSeries || Object.keys(timeSeries).length === 0) {
+      setErrorMessage(`No data available for ${selectedStock} in the selected timeframe.`);
+      setStockData(null);
+      return;
+    }
+    
+    const chartData = Object.entries(timeSeries).map(([date, values]: [string, any]) => ({
+      date,
+      open: parseFloat(values['1. open']),
+      high: parseFloat(values['2. high']),
+      low: parseFloat(values['3. low']),
+      close: parseFloat(values['4. close']),
+      volume: parseFloat(values['5. volume']),
+    })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    setStockData({
+      symbol: selectedStock,
+      timeframe,
+      chartData: chartData.slice(-90) // Last 90 data points
+    });
   };
 
   useEffect(() => {
     if (selectedStock) {
-      fetchStockData();
+      fetchStockDataWithRetry();
     }
   }, [selectedStock, timeframe]);
 
@@ -100,13 +110,33 @@ export const StockMarketData = () => {
     return `${date.getMonth() + 1}/${date.getDate()}`;
   };
 
+  const formatCurrency = (value: number, symbol: string) => {
+    if (isIndianStock(symbol)) {
+      // Format in Indian style (e.g. ₹1,00,000.00)
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+    } else {
+      // Format in US style (e.g. $100,000.00)
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+    }
+  };
+
   return (
     <Card className="h-full">
       <CardHeader>
         <CardTitle>Market Data</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium mb-1">Select Stock</label>
             <Select value={selectedStock} onValueChange={setSelectedStock}>
@@ -135,11 +165,22 @@ export const StockMarketData = () => {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex items-end">
+            <Button onClick={fetchStockDataWithRetry} disabled={loading} className="w-full">
+              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Refresh Data
+            </Button>
+          </div>
         </div>
 
         {loading ? (
           <div className="flex justify-center items-center h-64">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : errorMessage ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>{errorMessage}</p>
+            <p className="text-sm mt-2">Try selecting a different stock or timeframe.</p>
           </div>
         ) : stockData?.chartData?.length > 0 ? (
           <div className="space-y-8">
@@ -155,9 +196,15 @@ export const StockMarketData = () => {
                       tick={{ fontSize: 12 }} 
                       interval={Math.floor(stockData.chartData.length / 10)}
                     />
-                    <YAxis />
+                    <YAxis 
+                      tickFormatter={(value) => 
+                        isIndianStock(stockData.symbol) 
+                          ? `₹${new Intl.NumberFormat('en-IN').format(value)}` 
+                          : `$${value.toFixed(2)}`
+                      }
+                    />
                     <Tooltip 
-                      formatter={(value: number) => [`$${value.toFixed(2)}`, '']}
+                      formatter={(value: number) => [formatCurrency(value, stockData.symbol), '']}
                       labelFormatter={(label) => new Date(label).toLocaleDateString()}
                     />
                     <Legend />
@@ -207,25 +254,25 @@ export const StockMarketData = () => {
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="text-sm text-muted-foreground">Opening Price</div>
                 <div className="text-xl font-semibold">
-                  ${stockData.chartData[stockData.chartData.length - 1]?.open.toFixed(2)}
+                  {formatCurrency(stockData.chartData[stockData.chartData.length - 1]?.open, stockData.symbol)}
                 </div>
               </div>
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="text-sm text-muted-foreground">Closing Price</div>
                 <div className="text-xl font-semibold">
-                  ${stockData.chartData[stockData.chartData.length - 1]?.close.toFixed(2)}
+                  {formatCurrency(stockData.chartData[stockData.chartData.length - 1]?.close, stockData.symbol)}
                 </div>
               </div>
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="text-sm text-muted-foreground">High</div>
                 <div className="text-xl font-semibold">
-                  ${stockData.chartData[stockData.chartData.length - 1]?.high.toFixed(2)}
+                  {formatCurrency(stockData.chartData[stockData.chartData.length - 1]?.high, stockData.symbol)}
                 </div>
               </div>
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="text-sm text-muted-foreground">Low</div>
                 <div className="text-xl font-semibold">
-                  ${stockData.chartData[stockData.chartData.length - 1]?.low.toFixed(2)}
+                  {formatCurrency(stockData.chartData[stockData.chartData.length - 1]?.low, stockData.symbol)}
                 </div>
               </div>
             </div>
