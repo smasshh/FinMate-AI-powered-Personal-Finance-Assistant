@@ -11,12 +11,19 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
     const { userId } = await req.json();
+    
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+
+    console.log(`Processing request for user: ${userId}`);
 
     // Fetch user's financial data
     const expensesResponse = await fetch(`${PROJECT_URL}/rest/v1/expenses?user_id=eq.${userId}&select=*`, {
@@ -26,7 +33,14 @@ serve(async (req) => {
       },
     });
     
+    if (!expensesResponse.ok) {
+      const errorText = await expensesResponse.text();
+      console.error(`Error fetching expenses: ${errorText}`);
+      throw new Error(`Error fetching expenses: ${expensesResponse.status}`);
+    }
+    
     const expenses = await expensesResponse.json();
+    console.log(`Retrieved ${expenses.length} expenses`);
 
     const budgetsResponse = await fetch(`${PROJECT_URL}/rest/v1/budgets?user_id=eq.${userId}&select=*`, {
       headers: {
@@ -35,7 +49,14 @@ serve(async (req) => {
       },
     });
     
+    if (!budgetsResponse.ok) {
+      const errorText = await budgetsResponse.text();
+      console.error(`Error fetching budgets: ${errorText}`);
+      throw new Error(`Error fetching budgets: ${budgetsResponse.status}`);
+    }
+    
     const budgets = await budgetsResponse.json();
+    console.log(`Retrieved ${budgets.length} budgets`);
 
     // Prepare data for Gemini
     const prompt = `
@@ -52,6 +73,7 @@ serve(async (req) => {
     Keep the response concise, actionable, and under 300 words.
     `;
 
+    console.log("Calling Gemini API");
     const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent', {
       method: 'POST',
       headers: {
@@ -73,17 +95,30 @@ serve(async (req) => {
       }),
     });
 
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error(`Error from Gemini API: ${errorText}`);
+      throw new Error(`Gemini API error: ${geminiResponse.status}`);
+    }
+
     const analysis = await geminiResponse.json();
+    
+    if (!analysis.candidates || !analysis.candidates[0] || !analysis.candidates[0].content || !analysis.candidates[0].content.parts || !analysis.candidates[0].content.parts[0]) {
+      console.error("Unexpected Gemini API response structure:", JSON.stringify(analysis));
+      throw new Error("Invalid response from Gemini API");
+    }
+    
     const insights = analysis.candidates[0].content.parts[0].text;
+    console.log("Successfully generated insights");
 
     return new Response(JSON.stringify({ insights }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
+    console.error("Error in analyze-finances function:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
-

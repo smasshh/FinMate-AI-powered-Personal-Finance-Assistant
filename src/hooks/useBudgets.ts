@@ -186,16 +186,25 @@ export const useBudgets = () => {
   };
 
   const getAIRecommendations = async () => {
+    if (!user) {
+      console.error("User not authenticated");
+      return null;
+    }
+    
     try {
-      const response = await fetch('/functions/analyze-finances', {
-        method: 'POST',
-        body: JSON.stringify({ userId: user?.id }),
+      const { data, error } = await supabase.functions.invoke('analyze-finances', {
+        body: { userId: user.id }
       });
-      const data = await response.json();
+      
+      if (error) {
+        console.error("Error fetching AI recommendations:", error);
+        throw error;
+      }
+      
       return data.insights;
     } catch (error) {
       console.error("Error fetching AI recommendations:", error);
-      return null;
+      throw error;
     }
   };
 

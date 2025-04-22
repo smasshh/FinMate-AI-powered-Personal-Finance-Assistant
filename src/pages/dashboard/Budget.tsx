@@ -5,6 +5,7 @@ import { Plus, CircleCheck, CircleX, AlertTriangle, CirclePercent } from 'lucide
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -77,13 +78,20 @@ const Budget = () => {
 
   const handleGetRecommendations = async () => {
     setIsLoadingRecommendations(true);
+    setAIRecommendations(null);
+    
     try {
       const recommendations = await getAIRecommendations();
       setAIRecommendations(recommendations);
+      toast({
+        title: "AI Recommendations",
+        description: "Successfully generated budget recommendations",
+      });
     } catch (error) {
+      console.error("Error fetching AI recommendations:", error);
       toast({
         title: "Error",
-        description: "Failed to get AI recommendations",
+        description: "Failed to get AI recommendations. Please try again later.",
         variant: "destructive",
       });
     } finally {
@@ -121,6 +129,9 @@ const Budget = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Budget</DialogTitle>
+                <DialogDescription>
+                  Create a new budget to track your spending in specific categories.
+                </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -190,6 +201,17 @@ const Budget = () => {
           </Dialog>
         </div>
       </div>
+
+      {isLoadingRecommendations && (
+        <Card className="border-l-4 border-l-blue-500 shadow-md">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-center p-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+              <span className="ml-3">Generating AI recommendations...</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {aiRecommendations && (
         <Card className="border-l-4 border-l-purple-500 shadow-md transition-all duration-300 hover:shadow-lg">
