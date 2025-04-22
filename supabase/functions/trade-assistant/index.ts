@@ -65,7 +65,7 @@ async function processChatMessage(userId: string, message: string, pendingTrade:
       if (tradeResult.success) {
         return {
           intent: 'EXECUTE_TRADE',
-          messageResponse: `✅ Trade executed successfully! I've ${side === 'buy' ? 'bought' : 'sold'} ${quantity} shares of ${symbol} at $${tradeResult.filledPrice} per share.`,
+          messageResponse: `✅ Trade executed successfully! I've ${side === 'buy' ? 'bought' : 'sold'} ${quantity} shares of ${symbol} at $${tradeResult.filledPrice.toFixed(2)} per share.`,
           tradeInfo: {
             symbol,
             quantity,
@@ -81,7 +81,7 @@ async function processChatMessage(userId: string, message: string, pendingTrade:
     } 
     // If user asks for portfolio information
     else if (intent.type === 'GET_PORTFOLIO') {
-      const positions = await getPortfolioPositions();
+      const positions = await getPortfolioPositions(ALPACA_API_KEY, ALPACA_SECRET_KEY);
       
       if (positions.length === 0) {
         return {
@@ -105,20 +105,28 @@ async function processChatMessage(userId: string, message: string, pendingTrade:
     }
     // If user asks for stock information
     else if (intent.type === 'GET_STOCK_INFO' && intent.symbol) {
-      const stockInfo = await getStockInfo(intent.symbol);
-      if (!stockInfo) {
+      const price = await getStockPrice(intent.symbol);
+      
+      if (price === 0) {
         return {
           intent: 'ERROR',
           messageResponse: `I couldn't find information for ${intent.symbol}. Please check the symbol and try again.`
         };
       }
       
-      const price = await getStockPrice(intent.symbol);
+      const stockInfo = await getStockInfo(intent.symbol);
       
-      return {
-        intent: 'GET_STOCK_INFO',
-        messageResponse: `📈 **${stockInfo.name} (${intent.symbol})** \n\nCurrent Price: $${price} \n\n${stockInfo.description.substring(0, 300)}...`
-      };
+      if (stockInfo) {
+        return {
+          intent: 'GET_STOCK_INFO',
+          messageResponse: `📈 **${stockInfo.name} (${intent.symbol})** \n\nCurrent Price: $${price.toFixed(2)} \n\n${stockInfo.description?.substring(0, 300) || 'No detailed description available.'}...`
+        };
+      } else {
+        return {
+          intent: 'GET_STOCK_INFO',
+          messageResponse: `📈 ${intent.symbol} is currently trading at $${price.toFixed(2)}.`
+        };
+      }
     }
     // For any other type of message, provide a helpful response
     else {
@@ -155,7 +163,7 @@ async function extractIntentFromMessage(message: string, pendingTrade: any = nul
   const sellMatch = message.match(/(?:sell|exit)\s+(\d+)\s+(?:shares?|stocks?)?(?:\s+of)?\s+([A-Z]+)/i);
   const portfolioMatch = message.match(/(?:portfolio|holdings|positions|what do i own|show me my stocks)/i);
   const confirmMatch = message.match(/(?:yes|confirm|execute|proceed|go ahead|ok|okay)/i);
-  const stockInfoMatch = message.match(/(?:info|information|details|price|about|analyze)\s+(?:stock|ticker|symbol)?\s*([A-Z]+)/i);
+  const stockInfoMatch = message.match(/(?:info|information|details|price|about|analyze|what'?s the price of)\s+(?:stock|ticker|symbol)?\s*([A-Z]+)/i);
   
   // Simple hardcoded pattern matching as a fallback/optimization
   if (buyMatch) {
@@ -211,6 +219,7 @@ async function extractIntentFromMessage(message: string, pendingTrade: any = nul
 // Get real-time stock price from Alpha Vantage
 async function getStockPrice(symbol: string): Promise<number> {
   try {
+    console.log(`Fetching stock price for ${symbol} from Alpha Vantage`);
     const response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`);
     const data = await response.json();
     
@@ -219,6 +228,7 @@ async function getStockPrice(symbol: string): Promise<number> {
     }
     
     // Fallback to Alpaca API if Alpha Vantage fails
+    console.log(`Alpha Vantage failed, falling back to Alpaca API for ${symbol}`);
     const alpacaResponse = await fetch(`${ALPACA_BASE_URL}/v2/stocks/${symbol}/trades/latest`, {
       headers: {
         'APCA-API-KEY-ID': ALPACA_API_KEY,
@@ -242,6 +252,7 @@ async function getStockPrice(symbol: string): Promise<number> {
 // Get detailed stock information from Alpha Vantage
 async function getStockInfo(symbol: string) {
   try {
+    console.log(`Fetching stock info for ${symbol} from Alpha Vantage`);
     const response = await fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`);
     const data = await response.json();
     
@@ -285,6 +296,8 @@ async function generateChatResponse(message: string) {
 
 async function executeTrade(userId: string, symbol: string, quantity: number, side: 'buy' | 'sell') {
   try {
+    console.log(`Executing ${side} trade for ${quantity} shares of ${symbol}`);
+    
     const tradeResponse = await fetch(`${ALPACA_BASE_URL}/v2/orders`, {
       method: 'POST',
       headers: {
@@ -302,17 +315,26 @@ async function executeTrade(userId: string, symbol: string, quantity: number, si
     });
 
     const orderData = await tradeResponse.json();
+    console.log("Alpaca order response:", orderData);
+    
+    // Get current price for storing in the trade record
+    const currentPrice = await getStockPrice(symbol);
+    console.log(`Current price for ${symbol}: $${currentPrice}`);
     
     // If order is successful, store in Supabase
     if (tradeResponse.ok) {
-      // Get current price for storing in the trade record
-      const currentPrice = await getStockPrice(symbol);
-      
       // Create a Supabase client
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!, 
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
+      
+      // Store the trade price (either from order or from current price)
+      const price = orderData.filled_avg_price 
+        ? parseFloat(orderData.filled_avg_price) 
+        : currentPrice;
+      
+      console.log(`Inserting trade record with price: $${price}`);
       
       // Insert trade into the user_trades table
       await supabase
@@ -322,7 +344,7 @@ async function executeTrade(userId: string, symbol: string, quantity: number, si
           symbol: symbol,
           quantity: quantity,
           trade_type: side,
-          price_at_execution: currentPrice || Number(orderData.filled_avg_price) || 0,
+          price_at_execution: price,
           alpaca_order_id: orderData.id,
           status: orderData.status,
           via_chatbot: true
@@ -333,29 +355,40 @@ async function executeTrade(userId: string, symbol: string, quantity: number, si
       success: tradeResponse.ok,
       orderId: orderData.id,
       status: orderData.status,
-      filledPrice: orderData.filled_avg_price || await getStockPrice(symbol) || 0,
+      filledPrice: orderData.filled_avg_price ? parseFloat(orderData.filled_avg_price) : currentPrice,
       error: tradeResponse.ok ? null : orderData.message || 'Unknown error'
     };
   } catch (error) {
     console.error('Trade execution error:', error);
     return { 
       success: false, 
-      error: error.message 
+      error: error.message,
+      filledPrice: 0
     };
   }
 }
 
-async function getPortfolioPositions() {
+async function getPortfolioPositions(apiKey = ALPACA_API_KEY, secretKey = ALPACA_SECRET_KEY) {
   try {
+    console.log("Fetching portfolio positions from Alpaca");
     const positionsResponse = await fetch(`${ALPACA_BASE_URL}/v2/positions`, {
       method: 'GET',
       headers: {
-        'APCA-API-KEY-ID': ALPACA_API_KEY,
-        'APCA-API-SECRET-KEY': ALPACA_SECRET_KEY
+        'APCA-API-KEY-ID': apiKey,
+        'APCA-API-SECRET-KEY': secretKey
       }
     });
 
-    return await positionsResponse.json();
+    if (!positionsResponse.ok) {
+      console.error(`Alpaca API error: ${positionsResponse.status} ${positionsResponse.statusText}`);
+      const errorText = await positionsResponse.text();
+      console.error(`Error response: ${errorText}`);
+      return [];
+    }
+
+    const positions = await positionsResponse.json();
+    console.log(`Retrieved ${positions.length} positions`);
+    return positions;
   } catch (error) {
     console.error('Portfolio fetch error:', error);
     return [];
@@ -370,6 +403,8 @@ serve(async (req) => {
 
   try {
     const { action, userId, symbol, quantity, side, message, pendingTrade } = await req.json();
+    console.log(`Processing request with action: ${action}`);
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!, 
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!

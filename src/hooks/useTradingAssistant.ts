@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -94,6 +94,10 @@ export const useTradingAssistant = () => {
       // If this is confirming a trade, clear the pending trade
       if (intent === 'EXECUTE_TRADE' && tradeInfo) {
         setPendingTrade(null);
+        
+        // After execution, refresh portfolio data
+        await fetchPortfolioPositions();
+        await fetchTradeHistory();
       } 
       // If this is a new trade request, set the pending trade
       else if (intent === 'TRADE_CONFIRMATION' && tradeInfo) {
@@ -110,13 +114,6 @@ export const useTradingAssistant = () => {
       };
 
       setChatMessages(prev => [...prev, assistantMessage]);
-
-      // If this was a trade confirmation response, refresh the portfolio
-      if (intent === 'EXECUTE_TRADE' && tradeInfo) {
-        await fetchPortfolioPositions();
-        await fetchTradeHistory();
-      }
-
       return response.data;
     } catch (err) {
       console.error('Chat processing error:', err);
@@ -222,6 +219,7 @@ export const useTradingAssistant = () => {
     setError(null);
 
     try {
+      console.log("Fetching portfolio positions from edge function");
       const response = await supabase.functions.invoke('trade-assistant', {
         body: JSON.stringify({
           action: 'GET_PORTFOLIO',
@@ -233,8 +231,14 @@ export const useTradingAssistant = () => {
         throw new Error(response.error.message);
       }
 
-      setPortfolioPositions(response.data);
-      return response.data;
+      if (Array.isArray(response.data)) {
+        setPortfolioPositions(response.data);
+        console.log("Portfolio positions updated:", response.data);
+        return response.data;
+      } else {
+        console.error("Unexpected portfolio data format:", response.data);
+        return [];
+      }
     } catch (err) {
       console.error('Portfolio fetch error:', err);
       setError(err instanceof Error ? err.message : 'Unable to fetch portfolio');
@@ -255,6 +259,7 @@ export const useTradingAssistant = () => {
     }
 
     try {
+      console.log("Fetching trade history from database");
       const { data, error } = await supabase
         .from('user_trades')
         .select('*')
@@ -279,6 +284,7 @@ export const useTradingAssistant = () => {
         via_chatbot: trade.via_chatbot
       }));
 
+      console.log("Trade history updated:", typedTradeHistory);
       setTradeHistory(typedTradeHistory);
       return typedTradeHistory;
     } catch (err) {
