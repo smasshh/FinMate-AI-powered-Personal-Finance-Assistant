@@ -19,37 +19,37 @@ serve(async (req) => {
     const { userId } = await req.json();
 
     // Fetch user's financial data
-    const response = await fetch(`${PROJECT_URL}/rest/v1/expenses?user_id=eq.${userId}&select=*`, {
+    const expensesResponse = await fetch(`${PROJECT_URL}/rest/v1/expenses?user_id=eq.${userId}&select=*`, {
       headers: {
         'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
         'apikey': SERVICE_ROLE_KEY,
       },
     });
     
-    const expenses = await response.json();
+    const expenses = await expensesResponse.json();
 
-    const budgetResponse = await fetch(`${PROJECT_URL}/rest/v1/budgets?user_id=eq.${userId}&select=*`, {
+    const budgetsResponse = await fetch(`${PROJECT_URL}/rest/v1/budgets?user_id=eq.${userId}&select=*`, {
       headers: {
         'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
         'apikey': SERVICE_ROLE_KEY,
       },
     });
     
-    const budgets = await budgetResponse.json();
+    const budgets = await budgetsResponse.json();
 
     // Prepare data for Gemini
     const prompt = `
-    Analyze the following financial data and provide insights:
+    Analyze the following financial data and provide budget recommendations:
     
     Expenses: ${JSON.stringify(expenses)}
     Budgets: ${JSON.stringify(budgets)}
     
     Please provide:
-    1. Top spending categories
-    2. Budget adherence analysis
-    3. Personalized recommendations for savings
-    4. Unusual spending patterns if any
-    Keep the response concise and actionable.
+    1. Spending trend analysis
+    2. Category-wise budget recommendations
+    3. Tips to optimize spending
+    4. Potential areas for budget adjustments
+    Keep the response concise, actionable, and under 300 words.
     `;
 
     const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent', {
@@ -86,3 +86,4 @@ serve(async (req) => {
     });
   }
 });
+
