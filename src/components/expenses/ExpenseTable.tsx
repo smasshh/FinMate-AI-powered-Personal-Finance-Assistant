@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { 
   Table, 
@@ -94,9 +93,10 @@ export function ExpenseTable({ onEdit }: ExpenseTableProps) {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!expenseToDelete) return;
     try {
-      await deleteExpense.mutateAsync(id);
+      await deleteExpense.mutateAsync(expenseToDelete);
       toast({
         title: "Expense deleted",
         description: "The expense has been successfully deleted.",
@@ -253,7 +253,7 @@ export function ExpenseTable({ onEdit }: ExpenseTableProps) {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={() => expenseToDelete && handleDelete(expenseToDelete)}
+              onClick={handleDelete}
               className="bg-red-600 hover:bg-red-700"
             >
               Delete
