@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
 const PortfolioManagement = () => {
   const { 
@@ -86,7 +87,8 @@ const PortfolioManagement = () => {
   // Data for bar chart
   const barChartData = portfolioPositions.map(position => ({
     name: position.symbol,
-    profit: Number(position.unrealized_pl)
+    profit: Number(position.unrealized_pl),
+    fill: Number(position.unrealized_pl) >= 0 ? '#4ade80' : '#ef4444' // Add fill color directly to data
   }));
 
   // Custom formatter for toFixed to handle ValueType
@@ -95,11 +97,6 @@ const PortfolioManagement = () => {
       return value.toFixed(decimalPlaces);
     }
     return String(value);
-  };
-
-  // Bar fill color function
-  const getBarFillColor = (data: any) => {
-    return data.profit >= 0 ? '#4ade80' : '#ef4444';
   };
 
   return (
@@ -125,7 +122,7 @@ const PortfolioManagement = () => {
         </Button>
       </div>
       
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Value</CardTitle>
@@ -168,17 +165,19 @@ const PortfolioManagement = () => {
       
       <Card>
         <CardHeader className="pb-2">
-          <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="holdings">Your Holdings</TabsTrigger>
-              <TabsTrigger value="allocation">Asset Allocation</TabsTrigger>
-              <TabsTrigger value="history">Transaction History</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div>
+            <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab}>
+              <TabsList>
+                <TabsTrigger value="holdings">Your Holdings</TabsTrigger>
+                <TabsTrigger value="allocation">Asset Allocation</TabsTrigger>
+                <TabsTrigger value="history">Transaction History</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsContent value="holdings" className="mt-0">
+          {activeTab === "holdings" && (
+            <div>
               {loading ? (
                 <p>Loading portfolio...</p>
               ) : portfolioPositions.length === 0 ? (
@@ -366,15 +365,17 @@ const PortfolioManagement = () => {
                   </div>
                 </>
               )}
-            </TabsContent>
-            
-            <TabsContent value="allocation" className="mt-0">
+            </div>
+          )}
+          
+          {activeTab === "allocation" && (
+            <div>
               {portfolioPositions.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-muted-foreground">You need some holdings to view asset allocation.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-sm font-medium">Portfolio Allocation</CardTitle>
@@ -419,9 +420,8 @@ const PortfolioManagement = () => {
                             <Bar
                               dataKey="profit"
                               name="Profit/Loss"
-                              fill="#8884d8"
+                              fill="#8884d8" 
                               fillOpacity={0.8}
-                              stroke={(data) => (data.profit >= 0 ? '#4ade80' : '#ef4444')}
                             />
                           </ReBarChart>
                         </ResponsiveContainer>
@@ -430,9 +430,11 @@ const PortfolioManagement = () => {
                   </Card>
                 </div>
               )}
-            </TabsContent>
-            
-            <TabsContent value="history" className="mt-0">
+            </div>
+          )}
+          
+          {activeTab === "history" && (
+            <div>
               {tradeHistory.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-muted-foreground">No transaction history yet.</p>
@@ -471,8 +473,8 @@ const PortfolioManagement = () => {
                   </TableBody>
                 </Table>
               )}
-            </TabsContent>
-          </Tabs>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
