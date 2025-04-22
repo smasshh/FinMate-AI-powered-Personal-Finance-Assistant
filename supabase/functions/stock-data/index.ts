@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4"
 
@@ -44,6 +45,7 @@ serve(async (req) => {
   try {
     // Ensure API key is available
     if (!ALPHA_VANTAGE_API_KEY) {
+      console.error("Alpha Vantage API key is not configured");
       return new Response(
         JSON.stringify({ error: "Alpha Vantage API key is not configured" }),
         { 
@@ -54,8 +56,9 @@ serve(async (req) => {
     }
 
     const { action, symbol, userId, keywords } = await req.json()
+    console.log(`Processing request: ${action}${symbol ? ` for symbol ${symbol}` : ''}`)
     
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE)
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE || SUPABASE_ANON_KEY)
 
     switch(action) {
       case 'GENERATE_PREDICTION':
@@ -70,21 +73,47 @@ serve(async (req) => {
         }
 
         try {
+          console.log(`Generating prediction for symbol: ${symbol}, userId: ${userId}`)
+          
           // Fetch historical prices
           const dailyResponse = await fetch(
             `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=full&apikey=${ALPHA_VANTAGE_API_KEY}`
           );
           
           const dailyData = await dailyResponse.json();
+          console.log(`Received data from Alpha Vantage for ${symbol}:`, JSON.stringify(dailyData).substring(0, 200) + "...");
           
           // Check if we have valid data
-          if (dailyData['Error Message'] || dailyData['Note'] || !dailyData['Time Series (Daily)']) {
+          if (dailyData['Error Message']) {
+            console.error(`Alpha Vantage error for ${symbol}:`, dailyData['Error Message']);
             return new Response(
               JSON.stringify({ 
-                error: dailyData['Error Message'] || dailyData['Note'] || "No data available",
+                error: `Alpha Vantage error: ${dailyData['Error Message']}`,
                 symbol 
               }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+            );
+          }
+          
+          if (dailyData['Note']) {
+            console.error(`Alpha Vantage API limit reached:`, dailyData['Note']);
+            return new Response(
+              JSON.stringify({ 
+                error: `Alpha Vantage API limit reached: ${dailyData['Note']}`,
+                symbol 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+            );
+          }
+          
+          if (!dailyData['Time Series (Daily)'] || Object.keys(dailyData['Time Series (Daily)']).length === 0) {
+            console.error(`No data available for ${symbol}`);
+            return new Response(
+              JSON.stringify({ 
+                error: `No data available for ${symbol}. Try selecting a different stock.`,
+                symbol 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
             );
           }
 
@@ -93,9 +122,10 @@ serve(async (req) => {
           const dates = Object.keys(timeSeries).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
           
           if (dates.length < 30) {
+            console.error(`Insufficient historical data for ${symbol}. Only ${dates.length} days available.`);
             return new Response(
-              JSON.stringify({ error: "Insufficient historical data", symbol }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              JSON.stringify({ error: `Insufficient historical data for ${symbol}. Only ${dates.length} days available.` }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
             );
           }
 
@@ -111,7 +141,13 @@ serve(async (req) => {
           
           // Simple moving average prediction
           const movingAverage = prices.reduce((a, b) => a + b, 0) / prices.length;
-          const predictedPrice = movingAverage;
+          
+          // Use a simple exponential weighting for prediction
+          // More recent prices have more weight
+          const weights = Array.from({ length: prices.length }, (_, i) => Math.exp(-0.1 * i));
+          const weightSum = weights.reduce((a, b) => a + b, 0);
+          const weightedSum = prices.reduce((sum, price, i) => sum + price * weights[i], 0);
+          const predictedPrice = weightedSum / weightSum;
 
           // Calculate volatility
           const variance = prices.reduce((sum, price) => sum + Math.pow(price - movingAverage, 2), 0) / prices.length;
@@ -123,6 +159,8 @@ serve(async (req) => {
           // Predict 30 days from now
           const predictionDate = new Date();
           predictionDate.setDate(predictionDate.getDate() + 30);
+
+          console.log(`Generated prediction for ${symbol}: ${predictionResult.recommendation}, confidence: ${predictionResult.confidenceScore}`);
 
           // Store prediction
           const { error: insertError } = await supabase
@@ -139,7 +177,10 @@ serve(async (req) => {
               created_at: new Date().toISOString()
             });
 
-          if (insertError) throw insertError;
+          if (insertError) {
+            console.error(`Error saving prediction to database:`, insertError);
+            throw insertError;
+          }
 
           return new Response(JSON.stringify({ 
             success: true,
@@ -172,25 +213,38 @@ serve(async (req) => {
         }
 
       case 'DAILY_PRICES':
-        const dailyPricesResponse = await fetch(
-          `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${ALPHA_VANTAGE_API_KEY}`
-        )
-        const dailyPricesData = await dailyPricesResponse.json()
-        
-        // Check if response contains error or if the API call limit is reached
-        if (dailyPricesData['Error Message'] || dailyPricesData['Note']) {
+        try {
+          console.log(`Fetching daily prices for ${symbol}`);
+          const dailyPricesResponse = await fetch(
+            `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${ALPHA_VANTAGE_API_KEY}`
+          );
+          const dailyPricesData = await dailyPricesResponse.json();
+          
+          // Check if response contains error or if the API call limit is reached
+          if (dailyPricesData['Error Message'] || dailyPricesData['Note']) {
+            console.error(`Alpha Vantage error for ${symbol}:`, dailyPricesData['Error Message'] || dailyPricesData['Note']);
+            return new Response(
+              JSON.stringify({ 
+                error: dailyPricesData['Error Message'] || dailyPricesData['Note'],
+                symbol 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            );
+          }
+          
+          return new Response(JSON.stringify(dailyPricesData), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          console.error(`Error fetching daily prices for ${symbol}:`, error);
           return new Response(
-            JSON.stringify({ 
-              error: dailyPricesData['Error Message'] || dailyPricesData['Note'],
-              symbol 
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            JSON.stringify({ error: `Failed to fetch daily prices: ${error.message}` }),
+            { 
+              status: 500, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
           );
         }
-        
-        return new Response(JSON.stringify(dailyPricesData), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
 
       case 'WEEKLY_PRICES':
         const weeklyPricesResponse = await fetch(
@@ -281,12 +335,40 @@ serve(async (req) => {
         const symbols = ['NSEI', 'BSESN', 'NIFMDCP50.NS', 'NIFTY_IT.NS'];  // Nifty 50, Sensex, Nifty Midcap, Nifty IT
         const indices = [];
         
+        console.log('Fetching market indices data');
+        
         for (const indexSymbol of symbols) {
           try {
+            console.log(`Fetching data for index: ${indexSymbol}`);
             const quoteResponse = await fetch(
               `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${indexSymbol}&apikey=${ALPHA_VANTAGE_API_KEY}`
             );
+            
+            // Check for HTTP errors
+            if (!quoteResponse.ok) {
+              console.error(`HTTP error ${quoteResponse.status} for ${indexSymbol}`);
+              continue;
+            }
+            
             const quoteData = await quoteResponse.json();
+            console.log(`Received data for ${indexSymbol}:`, JSON.stringify(quoteData).substring(0, 100) + "...");
+            
+            // Check for API errors
+            if (quoteData['Error Message']) {
+              console.error(`Alpha Vantage error for ${indexSymbol}:`, quoteData['Error Message']);
+              continue;
+            }
+            
+            if (quoteData['Note']) {
+              console.error(`Alpha Vantage API limit reached for ${indexSymbol}:`, quoteData['Note']);
+              return new Response(
+                JSON.stringify({ 
+                  error: quoteData['Note'],
+                  indices: indices.length > 0 ? indices : undefined 
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+              );
+            }
             
             if (quoteData['Global Quote'] && Object.keys(quoteData['Global Quote']).length > 0) {
               const quote = quoteData['Global Quote'];
@@ -297,10 +379,24 @@ serve(async (req) => {
                 changePercent: quote['10. change percent'],
                 isPositive: parseFloat(quote['09. change']) >= 0
               });
+              console.log(`Added ${indexSymbol} to indices response`);
+            } else {
+              console.error(`No quote data available for ${indexSymbol}`);
             }
           } catch (error) {
             console.error(`Error fetching data for ${indexSymbol}:`, error);
           }
+        }
+        
+        if (indices.length === 0) {
+          console.error("No market indices data available");
+          return new Response(
+            JSON.stringify({ error: "Failed to fetch market indices. Try again later." }),
+            { 
+              status: 404,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
         }
         
         return new Response(JSON.stringify({ indices }), {
@@ -314,7 +410,7 @@ serve(async (req) => {
         })
     }
   } catch (error) {
-    console.error('Stock data fetch error:', error)
+    console.error('Stock data fetch error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

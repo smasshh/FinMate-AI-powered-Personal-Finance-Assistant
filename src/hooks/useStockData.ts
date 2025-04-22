@@ -20,14 +20,20 @@ export const useStockData = () => {
       const action = timeframe === 'daily' ? 'DAILY_PRICES' : 
                    timeframe === 'weekly' ? 'WEEKLY_PRICES' : 'MONTHLY_PRICES';
                    
+      console.log(`Fetching ${timeframe} stock data for ${symbol}`);
+      
       const pricesResponse = await supabase.functions.invoke('stock-data', {
         body: JSON.stringify({ action, symbol })
       });
 
-      if (pricesResponse.error) throw new Error(pricesResponse.error.message);
+      if (pricesResponse.error) {
+        console.error(`Error from Supabase function:`, pricesResponse.error);
+        throw new Error(pricesResponse.error.message);
+      }
       
       // Check if the response data contains an error from Alpha Vantage
       if (pricesResponse.data?.error) {
+        console.error(`Error from Alpha Vantage:`, pricesResponse.data.error);
         toast({
           title: 'API Limit Notice',
           description: `Could not fetch data for ${symbol}: ${pricesResponse.data.error}`,
@@ -39,6 +45,7 @@ export const useStockData = () => {
       setStockPrices(pricesResponse.data);
       return pricesResponse.data;
     } catch (err: any) {
+      console.error(`Error in fetchStockData:`, err);
       setError(err);
       toast({
         title: 'Error fetching stock data',
@@ -55,6 +62,8 @@ export const useStockData = () => {
     setLoading(true);
     setError(null);
     try {
+      console.log(`Fetching stock news${symbol ? ` for ${symbol}` : ''}`);
+      
       const newsResponse = await supabase.functions.invoke('stock-data', {
         body: JSON.stringify({ 
           action: 'NEWS', 
@@ -62,10 +71,14 @@ export const useStockData = () => {
         })
       });
 
-      if (newsResponse.error) throw new Error(newsResponse.error.message);
+      if (newsResponse.error) {
+        console.error(`Error from Supabase function:`, newsResponse.error);
+        throw new Error(newsResponse.error.message);
+      }
       
       // Check if the response data contains an error from Alpha Vantage
       if (newsResponse.data?.error) {
+        console.error(`Error from Alpha Vantage:`, newsResponse.data.error);
         toast({
           title: 'API Limit Notice',
           description: newsResponse.data.error,
@@ -77,6 +90,7 @@ export const useStockData = () => {
       setStockNews(newsResponse.data);
       return newsResponse.data;
     } catch (err: any) {
+      console.error(`Error in fetchStockNews:`, err);
       setError(err);
       toast({
         title: 'Error fetching stock news',
@@ -93,24 +107,38 @@ export const useStockData = () => {
     setLoading(true);
     setError(null);
     try {
+      console.log('Fetching market indices');
+      
       const indicesResponse = await supabase.functions.invoke('stock-data', {
         body: JSON.stringify({ action: 'MARKET_INDICES' })
       });
 
-      if (indicesResponse.error) throw new Error(indicesResponse.error.message);
+      if (indicesResponse.error) {
+        console.error(`Error from Supabase function:`, indicesResponse.error);
+        throw new Error(indicesResponse.error.message);
+      }
       
       if (indicesResponse.data?.error) {
+        console.error(`Error from Alpha Vantage:`, indicesResponse.data.error);
         toast({
           title: 'API Limit Notice',
           description: indicesResponse.data.error,
           variant: 'destructive',
         });
+        
+        // In case of API limit error, still return partial data if available
+        if (indicesResponse.data.indices && indicesResponse.data.indices.length > 0) {
+          setMarketIndices(indicesResponse.data);
+          return indicesResponse.data;
+        }
+        
         return null;
       }
 
       setMarketIndices(indicesResponse.data);
       return indicesResponse.data;
     } catch (err: any) {
+      console.error(`Error in fetchMarketIndices:`, err);
       setError(err);
       toast({
         title: 'Error fetching market indices',
@@ -134,28 +162,58 @@ export const useStockData = () => {
       return { error: 'You must be logged in to add to watchlist' };
     }
     
-    const { data, error } = await supabase
-      .from('stock_watchlist')
-      .insert({ 
-        stock_symbol: symbol,
-        user_id: user.id 
-      });
+    try {
+      console.log(`Adding ${symbol} to watchlist for user ${user.id}`);
       
-    if (error) {
+      // Check if already in watchlist
+      const { data: existingData } = await supabase
+        .from('stock_watchlist')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('stock_symbol', symbol)
+        .single();
+        
+      if (existingData) {
+        toast({
+          title: 'Already in watchlist',
+          description: `${symbol} is already in your watchlist`,
+          variant: 'default',
+        });
+        return { data: existingData, error: null };
+      }
+        
+      const { data, error } = await supabase
+        .from('stock_watchlist')
+        .insert({ 
+          stock_symbol: symbol,
+          user_id: user.id 
+        });
+        
+      if (error) {
+        console.error(`Error adding to watchlist:`, error);
+        toast({
+          title: 'Error adding to watchlist',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return { data: null, error };
+      } else {
+        toast({
+          title: 'Stock added',
+          description: `${symbol} added to your watchlist`,
+          variant: 'default',
+        });
+        return { data, error: null };
+      }
+    } catch (err: any) {
+      console.error(`Error in addToWatchlist:`, err);
       toast({
         title: 'Error adding to watchlist',
-        description: error.message,
+        description: err.message,
         variant: 'destructive',
       });
-    } else {
-      toast({
-        title: 'Stock added',
-        description: `${symbol} added to your watchlist`,
-        variant: 'default',
-      });
+      return { data: null, error: err };
     }
-      
-    return { data, error };
   };
 
   const generatePrediction = async (symbol: string) => {
@@ -171,6 +229,7 @@ export const useStockData = () => {
     
     try {
       setLoading(true);
+      console.log(`Generating prediction for ${symbol} for user ${user.id}`);
       
       const response = await supabase.functions.invoke('stock-data', {
         body: JSON.stringify({ 
@@ -180,9 +239,13 @@ export const useStockData = () => {
         })
       });
 
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) {
+        console.error(`Error from Supabase function:`, response.error);
+        throw new Error(response.error.message);
+      }
       
       if (response.data?.error) {
+        console.error(`Error generating prediction:`, response.data.error);
         toast({
           title: 'Prediction Error',
           description: response.data.error,

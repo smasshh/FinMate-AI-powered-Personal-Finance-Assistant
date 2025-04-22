@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useStockData } from '@/hooks/useStockData';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, RefreshCcw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -30,13 +30,27 @@ export const StockPredictions = () => {
 
   const fetchWatchlistStocks = async () => {
     try {
+      setLoading(true);
+      setErrorMessage(null);
+      
       const { data, error } = await supabase
         .from('stock_watchlist')
         .select('stock_symbol')
         .eq('user_id', user?.id);
 
-      if (error) throw error;
-      setWatchlistStocks(data || []);
+      if (error) {
+        console.error('Error fetching watchlist stocks:', error);
+        setErrorMessage('Failed to load your watchlist. Please try again.');
+        throw error;
+      }
+      
+      if (!data || data.length === 0) {
+        setWatchlistStocks([]);
+        // If no watchlist stocks, don't show an error but display helpful message in UI
+        return;
+      }
+      
+      setWatchlistStocks(data);
       
       // Select first stock by default if available
       if (data && data.length > 0 && !selectedStock) {
@@ -44,6 +58,13 @@ export const StockPredictions = () => {
       }
     } catch (error) {
       console.error('Error fetching watchlist stocks:', error);
+      toast({
+        title: 'Error loading watchlist',
+        description: 'Please try again later',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -58,14 +79,22 @@ export const StockPredictions = () => {
         .from('stock_predictions')
         .select('*')
         .eq('user_id', user.id)
-        .order('prediction_date', { ascending: false });
+        .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching predictions:', error);
+        setErrorMessage('Failed to load predictions. Please try again.');
+        throw error;
+      }
       
       setPredictions(data || []);
     } catch (error: any) {
       console.error('Error fetching predictions:', error);
-      setErrorMessage('Failed to load predictions. Please try again.');
+      toast({
+        title: 'Error loading predictions',
+        description: 'Please try again later',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -115,7 +144,7 @@ export const StockPredictions = () => {
           description: result.error,
           variant: 'destructive',
         });
-      } else {
+      } else if (result.data && result.data.prediction) {
         toast({
           title: 'Prediction Generated',
           description: `Successfully created prediction for ${selectedStock}`,
@@ -123,17 +152,33 @@ export const StockPredictions = () => {
         });
         
         // Refresh predictions after generation
-        fetchPredictions();
+        await fetchPredictions();
+      } else {
+        setErrorMessage('Failed to generate prediction: Unexpected response format');
+        toast({
+          title: 'Prediction Failed',
+          description: 'Unexpected error occurred. Please try again.',
+          variant: 'destructive',
+        });
       }
     } catch (error: any) {
       console.error('Error generating prediction:', error);
       setErrorMessage(`Failed to generate prediction: ${error.message}`);
+      toast({
+        title: 'Prediction Failed',
+        description: error.message || 'An unexpected error occurred',
+        variant: 'destructive',
+      });
     } finally {
       setGenerating(false);
     }
   };
 
   const getRecommendation = (predictionData: any) => {
+    if (!predictionData || typeof predictionData.current_price !== 'number' || typeof predictionData.predicted_price !== 'number') {
+      return { action: 'UNKNOWN', color: 'text-gray-500' };
+    }
+    
     const currentPrice = predictionData.current_price;
     const predictedPrice = predictionData.predicted_price;
     const percentChange = ((predictedPrice - currentPrice) / currentPrice) * 100;
@@ -144,15 +189,42 @@ export const StockPredictions = () => {
   };
 
   const getRiskLevel = (confidenceScore: number) => {
+    if (typeof confidenceScore !== 'number') {
+      return { level: 'UNKNOWN', color: 'text-gray-500', icon: <AlertTriangle className="h-4 w-4" /> };
+    }
+    
     if (confidenceScore > 0.75) return { level: 'LOW', color: 'text-green-500', icon: <TrendingUp className="h-4 w-4" /> };
     if (confidenceScore > 0.5) return { level: 'MEDIUM', color: 'text-amber-500', icon: <TrendingDown className="h-4 w-4" /> };
     return { level: 'HIGH', color: 'text-red-500', icon: <AlertTriangle className="h-4 w-4" /> };
   };
 
+  const refreshData = async () => {
+    if (user) {
+      await Promise.all([
+        fetchWatchlistStocks(),
+        fetchPredictions()
+      ]);
+      
+      toast({
+        title: 'Data Refreshed',
+        description: 'Predictions and watchlist data has been updated',
+      });
+    }
+  };
+
   return (
     <Card className="h-full">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>AI-Generated Predictions</CardTitle>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={refreshData}
+          disabled={loading}
+        >
+          <RefreshCcw className="w-4 h-4 mr-2" />
+          Refresh
+        </Button>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -163,18 +235,29 @@ export const StockPredictions = () => {
                 <SelectValue placeholder="Select a stock" />
               </SelectTrigger>
               <SelectContent>
-                {watchlistStocks.map((stock) => (
-                  <SelectItem key={stock.stock_symbol} value={stock.stock_symbol}>
-                    {stock.stock_symbol}
+                {watchlistStocks.length > 0 ? (
+                  watchlistStocks.map((stock) => (
+                    <SelectItem key={stock.stock_symbol} value={stock.stock_symbol}>
+                      {stock.stock_symbol}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="no-stocks" disabled>
+                    No stocks in watchlist
                   </SelectItem>
-                ))}
+                )}
               </SelectContent>
             </Select>
+            {watchlistStocks.length === 0 && !loading && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Add stocks to your watchlist to generate predictions
+              </p>
+            )}
           </div>
           <div className="flex items-end">
             <Button 
               onClick={handleGeneratePrediction} 
-              disabled={generating || !selectedStock}
+              disabled={generating || !selectedStock || watchlistStocks.length === 0}
               className="w-full md:w-auto"
             >
               {generating ? (
@@ -338,7 +421,9 @@ export const StockPredictions = () => {
             <p className="text-sm mt-2">
               {selectedStock ? 
                 'Click "Generate Prediction" to create your first prediction.' : 
-                'Add stocks to your watchlist to generate predictions.'}
+                watchlistStocks.length > 0 ?
+                  'Select a stock from your watchlist to generate a prediction.' :
+                  'Add stocks to your watchlist to generate predictions.'}
             </p>
           </div>
         )}
