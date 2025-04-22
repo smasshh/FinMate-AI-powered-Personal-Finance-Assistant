@@ -89,6 +89,19 @@ const PortfolioManagement = () => {
     profit: Number(position.unrealized_pl)
   }));
 
+  // Custom formatter for toFixed to handle ValueType
+  const formatToFixed = (value: any, decimalPlaces: number = 2): string => {
+    if (typeof value === 'number') {
+      return value.toFixed(decimalPlaces);
+    }
+    return String(value);
+  };
+
+  // Bar fill color function
+  const getBarFillColor = (data: any) => {
+    return data.profit >= 0 ? '#4ade80' : '#ef4444';
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -155,7 +168,7 @@ const PortfolioManagement = () => {
       
       <Card>
         <CardHeader className="pb-2">
-          <Tabs defaultValue="holdings" onValueChange={setActiveTab}>
+          <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="holdings">Your Holdings</TabsTrigger>
               <TabsTrigger value="allocation">Asset Allocation</TabsTrigger>
@@ -164,149 +177,18 @@ const PortfolioManagement = () => {
           </Tabs>
         </CardHeader>
         <CardContent>
-          <TabsContent value="holdings" className="mt-0">
-            {loading ? (
-              <p>Loading portfolio...</p>
-            ) : portfolioPositions.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground mb-4">You don't have any holdings yet.</p>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Your First Investment
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Execute Trade</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 p-4">
-                      <div>
-                        <Select 
-                          value={tradeType} 
-                          onValueChange={(val: 'buy' | 'sell') => setTradeType(val)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Trade Type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="buy">Buy</SelectItem>
-                            <SelectItem value="sell">Sell</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Input 
-                        placeholder="Stock Symbol (e.g., AAPL, MSFT)" 
-                        value={selectedStock}
-                        onChange={(e) => setSelectedStock(e.target.value)}
-                      />
-                      <Input 
-                        type="number" 
-                        placeholder="Quantity" 
-                        value={quantity}
-                        onChange={(e) => setQuantity(e.target.value)}
-                      />
-                      <Button 
-                        onClick={handleTrade} 
-                        disabled={loading}
-                        className="w-full"
-                      >
-                        Execute Trade
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Symbol</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Avg. Price</TableHead>
-                        <TableHead>Current Price</TableHead>
-                        <TableHead>Market Value</TableHead>
-                        <TableHead>Profit/Loss</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {portfolioPositions.map((position) => (
-                        <TableRow key={position.symbol}>
-                          <TableCell className="font-medium">{position.symbol}</TableCell>
-                          <TableCell>{position.qty}</TableCell>
-                          <TableCell>${Number(position.avg_entry_price).toFixed(2)}</TableCell>
-                          <TableCell>${Number(position.current_price).toFixed(2)}</TableCell>
-                          <TableCell>${Number(position.market_value).toFixed(2)}</TableCell>
-                          <TableCell 
-                            className={
-                              Number(position.unrealized_pl) >= 0 
-                                ? 'text-green-600' 
-                                : 'text-red-600'
-                            }
-                          >
-                            ${Number(position.unrealized_pl).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button size="sm" variant="outline">Trade</Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Trade {position.symbol}</DialogTitle>
-                                </DialogHeader>
-                                <div className="space-y-4 p-4">
-                                  <div>
-                                    <Select 
-                                      defaultValue="buy"
-                                      onValueChange={(val: 'buy' | 'sell') => setTradeType(val)}
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select Trade Type" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="buy">Buy More</SelectItem>
-                                        <SelectItem value="sell">Sell</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <Input 
-                                    type="number" 
-                                    placeholder="Quantity" 
-                                    value={quantity}
-                                    onChange={(e) => setQuantity(e.target.value)}
-                                  />
-                                  <Button 
-                                    onClick={() => {
-                                      executeTrade(position.symbol, Number(quantity), tradeType)
-                                        .then(() => {
-                                          setQuantity('');
-                                        });
-                                    }} 
-                                    disabled={loading}
-                                    className="w-full"
-                                  >
-                                    Execute Trade
-                                  </Button>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <div className="flex justify-end mt-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsContent value="holdings" className="mt-0">
+              {loading ? (
+                <p>Loading portfolio...</p>
+              ) : portfolioPositions.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground mb-4">You don't have any holdings yet.</p>
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button>
                         <Plus className="mr-2 h-4 w-4" />
-                        New Trade
+                        Add Your First Investment
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
@@ -329,7 +211,7 @@ const PortfolioManagement = () => {
                           </Select>
                         </div>
                         <Input 
-                          placeholder="Stock Symbol" 
+                          placeholder="Stock Symbol (e.g., AAPL, MSFT)" 
                           value={selectedStock}
                           onChange={(e) => setSelectedStock(e.target.value)}
                         />
@@ -350,114 +232,247 @@ const PortfolioManagement = () => {
                     </DialogContent>
                   </Dialog>
                 </div>
-              </>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="allocation" className="mt-0">
-            {portfolioPositions.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">You need some holdings to view asset allocation.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm font-medium">Portfolio Allocation</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex justify-center">
-                    <div style={{ width: '100%', height: 300 }}>
-                      <ResponsiveContainer>
-                        <PieChart>
-                          <Pie
-                            data={pieChartData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={true}
-                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                            outerRadius={80}
-                            fill="#8884d8"
-                            dataKey="value"
-                          >
-                            {pieChartData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(value) => [`$${value.toFixed(2)}`, 'Value']} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm font-medium">Profit/Loss by Asset</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div style={{ width: '100%', height: 300 }}>
-                      <ResponsiveContainer>
-                        <ReBarChart data={barChartData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <Tooltip formatter={(value) => [`$${value.toFixed(2)}`, 'Profit/Loss']} />
-                          <Bar
-                            dataKey="profit"
-                            fill="#8884d8"
-                            name="Profit/Loss"
-                            // Color based on positive or negative
-                            fill={(data) => (data.profit >= 0 ? '#4ade80' : '#ef4444')}
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Symbol</TableHead>
+                          <TableHead>Quantity</TableHead>
+                          <TableHead>Avg. Price</TableHead>
+                          <TableHead>Current Price</TableHead>
+                          <TableHead>Market Value</TableHead>
+                          <TableHead>Profit/Loss</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {portfolioPositions.map((position) => (
+                          <TableRow key={position.symbol}>
+                            <TableCell className="font-medium">{position.symbol}</TableCell>
+                            <TableCell>{position.qty}</TableCell>
+                            <TableCell>${Number(position.avg_entry_price).toFixed(2)}</TableCell>
+                            <TableCell>${Number(position.current_price).toFixed(2)}</TableCell>
+                            <TableCell>${Number(position.market_value).toFixed(2)}</TableCell>
+                            <TableCell 
+                              className={
+                                Number(position.unrealized_pl) >= 0 
+                                  ? 'text-green-600' 
+                                  : 'text-red-600'
+                              }
+                            >
+                              ${Number(position.unrealized_pl).toFixed(2)}
+                            </TableCell>
+                            <TableCell>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button size="sm" variant="outline">Trade</Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Trade {position.symbol}</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 p-4">
+                                    <div>
+                                      <Select 
+                                        defaultValue="buy"
+                                        onValueChange={(val: 'buy' | 'sell') => setTradeType(val)}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select Trade Type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="buy">Buy More</SelectItem>
+                                          <SelectItem value="sell">Sell</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <Input 
+                                      type="number" 
+                                      placeholder="Quantity" 
+                                      value={quantity}
+                                      onChange={(e) => setQuantity(e.target.value)}
+                                    />
+                                    <Button 
+                                      onClick={() => {
+                                        executeTrade(position.symbol, Number(quantity), tradeType)
+                                          .then(() => {
+                                            setQuantity('');
+                                          });
+                                      }} 
+                                      disabled={loading}
+                                      className="w-full"
+                                    >
+                                      Execute Trade
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex justify-end mt-4">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <Plus className="mr-2 h-4 w-4" />
+                          New Trade
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Execute Trade</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 p-4">
+                          <div>
+                            <Select 
+                              value={tradeType} 
+                              onValueChange={(val: 'buy' | 'sell') => setTradeType(val)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select Trade Type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="buy">Buy</SelectItem>
+                                <SelectItem value="sell">Sell</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Input 
+                            placeholder="Stock Symbol" 
+                            value={selectedStock}
+                            onChange={(e) => setSelectedStock(e.target.value)}
                           />
-                        </ReBarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="history" className="mt-0">
-            {tradeHistory.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No transaction history yet.</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date & Time</TableHead>
-                    <TableHead>Symbol</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tradeHistory.map((trade) => (
-                    <TableRow key={trade.id}>
-                      <TableCell>{new Date(trade.executed_at).toLocaleString()}</TableCell>
-                      <TableCell className="font-medium">{trade.symbol}</TableCell>
-                      <TableCell className={trade.trade_type === 'buy' ? 'text-green-600' : 'text-red-600'}>
-                        {trade.trade_type.toUpperCase()}
-                      </TableCell>
-                      <TableCell>{trade.quantity}</TableCell>
-                      <TableCell>${trade.price_at_execution.toFixed(2)}</TableCell>
-                      <TableCell>${(trade.price_at_execution * trade.quantity).toFixed(2)}</TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                          {trade.status}
-                        </span>
-                      </TableCell>
+                          <Input 
+                            type="number" 
+                            placeholder="Quantity" 
+                            value={quantity}
+                            onChange={(e) => setQuantity(e.target.value)}
+                          />
+                          <Button 
+                            onClick={handleTrade} 
+                            disabled={loading}
+                            className="w-full"
+                          >
+                            Execute Trade
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </>
+              )}
+            </TabsContent>
+            
+            <TabsContent value="allocation" className="mt-0">
+              {portfolioPositions.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">You need some holdings to view asset allocation.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm font-medium">Portfolio Allocation</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex justify-center">
+                      <div style={{ width: '100%', height: 300 }}>
+                        <ResponsiveContainer>
+                          <PieChart>
+                            <Pie
+                              data={pieChartData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={true}
+                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {pieChartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value) => [`$${formatToFixed(value)}`, 'Value']} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm font-medium">Profit/Loss by Asset</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div style={{ width: '100%', height: 300 }}>
+                        <ResponsiveContainer>
+                          <ReBarChart data={barChartData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <Tooltip formatter={(value) => [`$${formatToFixed(value)}`, 'Profit/Loss']} />
+                            <Bar
+                              dataKey="profit"
+                              name="Profit/Loss"
+                              fill="#8884d8"
+                              fillOpacity={0.8}
+                              stroke={(data) => (data.profit >= 0 ? '#4ade80' : '#ef4444')}
+                            />
+                          </ReBarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </TabsContent>
+            
+            <TabsContent value="history" className="mt-0">
+              {tradeHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">No transaction history yet.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date & Time</TableHead>
+                      <TableHead>Symbol</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </TabsContent>
+                  </TableHeader>
+                  <TableBody>
+                    {tradeHistory.map((trade) => (
+                      <TableRow key={trade.id}>
+                        <TableCell>{new Date(trade.executed_at).toLocaleString()}</TableCell>
+                        <TableCell className="font-medium">{trade.symbol}</TableCell>
+                        <TableCell className={trade.trade_type === 'buy' ? 'text-green-600' : 'text-red-600'}>
+                          {trade.trade_type.toUpperCase()}
+                        </TableCell>
+                        <TableCell>{trade.quantity}</TableCell>
+                        <TableCell>${trade.price_at_execution.toFixed(2)}</TableCell>
+                        <TableCell>${(trade.price_at_execution * trade.quantity).toFixed(2)}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                            {trade.status}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

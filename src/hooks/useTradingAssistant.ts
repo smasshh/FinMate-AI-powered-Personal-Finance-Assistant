@@ -34,6 +34,9 @@ export type TradeHistory = {
   price_at_execution: number;
   executed_at: string;
   status: string;
+  user_id?: string;
+  alpaca_order_id?: string;
+  via_chatbot?: boolean;
 };
 
 export const useTradingAssistant = () => {
@@ -247,8 +250,22 @@ export const useTradingAssistant = () => {
         throw error;
       }
 
-      setTradeHistory(data || []);
-      return data;
+      // Convert the trade data to the correct TradeHistory type
+      const typedTradeHistory: TradeHistory[] = (data || []).map(trade => ({
+        id: trade.id,
+        symbol: trade.symbol,
+        quantity: trade.quantity,
+        trade_type: trade.trade_type === 'buy' ? 'buy' : 'sell',
+        price_at_execution: trade.price_at_execution,
+        executed_at: trade.executed_at,
+        status: trade.status,
+        user_id: trade.user_id,
+        alpaca_order_id: trade.alpaca_order_id,
+        via_chatbot: trade.via_chatbot
+      }));
+
+      setTradeHistory(typedTradeHistory);
+      return typedTradeHistory;
     } catch (err) {
       console.error('Trade history fetch error:', err);
       toast({
