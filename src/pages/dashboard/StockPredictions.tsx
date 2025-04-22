@@ -9,10 +9,12 @@ import { useStockData } from '@/hooks/useStockData';
 import { StockMarketInsights } from '@/components/stocks/StockMarketInsights';
 import { StockWatchlist } from '@/components/stocks/StockWatchlist';
 import { StockNews } from '@/components/stocks/StockNews';
+import { StockMarketData } from '@/components/stocks/StockMarketData';
+import { StockPredictions as AIStockPredictions } from '@/components/stocks/StockPredictions';
 
 const StockPredictions = () => {
   const [activeTab, setActiveTab] = useState('watchlist');
-  const { loading, fetchStockData } = useStockData();
+  const { loading, fetchStockData, fetchStockNews } = useStockData();
 
   const handleRefresh = () => {
     // Refresh market data
@@ -20,6 +22,7 @@ const StockPredictions = () => {
     fetchStockData('SENSEX');
     fetchStockData('NIFTYBANK');
     fetchStockData('NIFTYIT');
+    fetchStockNews();
   };
 
   return (
@@ -55,24 +58,10 @@ const StockPredictions = () => {
             <StockWatchlist />
           </TabsContent>
           <TabsContent value="predictions" className="m-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>AI-Generated Predictions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                Coming soon: AI-powered stock predictions
-              </CardContent>
-            </Card>
+            <AIStockPredictions />
           </TabsContent>
           <TabsContent value="market-data" className="m-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>Market Data</CardTitle>
-              </CardHeader>
-              <CardContent>
-                Coming soon: Detailed market data and charts
-              </CardContent>
-            </Card>
+            <StockMarketData />
           </TabsContent>
           <TabsContent value="news" className="m-0">
             <StockNews />
