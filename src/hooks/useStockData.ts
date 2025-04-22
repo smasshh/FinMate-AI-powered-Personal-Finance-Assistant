@@ -1,12 +1,14 @@
 
 import { useState } from 'react'
 import { supabase } from '@/integrations/supabase/client'
+import { useAuth } from '@/contexts/AuthContext'
 
 export const useStockData = () => {
   const [stockPrices, setStockPrices] = useState(null)
   const [stockNews, setStockNews] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const { user } = useAuth()
 
   const fetchStockData = async (symbol: string) => {
     setLoading(true)
@@ -29,9 +31,19 @@ export const useStockData = () => {
   }
 
   const addToWatchlist = async (symbol: string) => {
+    if (!user) {
+      setError(new Error('You must be logged in to add to watchlist'))
+      return { error: 'You must be logged in to add to watchlist' }
+    }
+    
     const { data, error } = await supabase
       .from('stock_watchlist')
-      .insert({ stock_symbol: symbol })
+      .insert({ 
+        stock_symbol: symbol,
+        user_id: user.id 
+      })
+      
+    return { data, error }
   }
 
   return { 
