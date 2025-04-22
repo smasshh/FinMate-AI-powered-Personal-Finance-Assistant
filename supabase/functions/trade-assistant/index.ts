@@ -32,6 +32,13 @@ async function processChatMessage(userId: string, message: string, pendingTrade:
       // We'll use a two-step approach here. First respond with a confirmation request.
       // Get real-time price from Alpha Vantage for better user experience
       const stockPrice = await getStockPrice(intent.symbol);
+      if (stockPrice === 0) {
+        return {
+          intent: 'ERROR',
+          messageResponse: `I couldn't find information for ${intent.symbol}. Please check the symbol and try again.`
+        };
+      }
+      
       const estimatedCost = stockPrice * intent.quantity;
       
       return {
@@ -52,6 +59,8 @@ async function processChatMessage(userId: string, message: string, pendingTrade:
       const quantity = tradeDetails.quantity || intent.quantity;
       const side = tradeDetails.side || intent.side;
       
+      console.log(`Processing trade confirmation with details:`, { symbol, quantity, side });
+      
       if (!symbol || !quantity || !side) {
         return {
           intent: 'ERROR',
@@ -63,6 +72,9 @@ async function processChatMessage(userId: string, message: string, pendingTrade:
       const tradeResult = await executeTrade(userId, symbol, quantity, side);
       
       if (tradeResult.success) {
+        // Update the portfolio in the database after successful trade
+        await updatePortfolioAfterTrade(userId, symbol, quantity, side, tradeResult.filledPrice);
+        
         return {
           intent: 'EXECUTE_TRADE',
           messageResponse: `✅ Trade executed successfully! I've ${side === 'buy' ? 'bought' : 'sold'} ${quantity} shares of ${symbol} at $${tradeResult.filledPrice.toFixed(2)} per share.`,
@@ -82,6 +94,24 @@ async function processChatMessage(userId: string, message: string, pendingTrade:
     // If user asks for portfolio information
     else if (intent.type === 'GET_PORTFOLIO') {
       const positions = await getPortfolioPositions(ALPACA_API_KEY, ALPACA_SECRET_KEY);
+      console.log("Portfolio positions from Alpaca:", positions);
+      
+      // Cache the positions in the database for the frontend to use
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!, 
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
+      
+      if (positions.length > 0) {
+        // Clear existing portfolio snapshots and create a new one
+        await supabase
+          .from('portfolio_snapshots')
+          .insert({
+            user_id: userId,
+            portfolio_value: positions.reduce((sum, pos) => sum + Number(pos.market_value), 0),
+            positions_data: positions
+          });
+      }
       
       if (positions.length === 0) {
         return {
@@ -216,6 +246,79 @@ async function extractIntentFromMessage(message: string, pendingTrade: any = nul
   }
 }
 
+// Update portfolio database after successful trade
+async function updatePortfolioAfterTrade(userId: string, symbol: string, quantity: number, side: 'buy' | 'sell', price: number) {
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!, 
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+    
+    console.log(`Updating portfolio for user ${userId} after ${side} trade of ${quantity} shares of ${symbol} at $${price}`);
+    
+    // Check if the user already has this symbol in their portfolio
+    const { data: existingPortfolio } = await supabase
+      .from('portfolio')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('stock_symbol', symbol)
+      .single();
+      
+    if (side === 'buy') {
+      if (existingPortfolio) {
+        // Update existing position
+        const newQuantity = existingPortfolio.quantity + quantity;
+        const newAvgPrice = ((existingPortfolio.quantity * existingPortfolio.purchase_price) + (quantity * price)) / newQuantity;
+        
+        await supabase
+          .from('portfolio')
+          .update({
+            quantity: newQuantity,
+            purchase_price: newAvgPrice
+          })
+          .eq('id', existingPortfolio.id);
+      } else {
+        // Insert new position
+        await supabase
+          .from('portfolio')
+          .insert({
+            user_id: userId,
+            stock_symbol: symbol,
+            quantity: quantity,
+            purchase_price: price,
+            purchase_date: new Date().toISOString().split('T')[0]
+          });
+      }
+    } else if (side === 'sell') {
+      if (existingPortfolio) {
+        const newQuantity = existingPortfolio.quantity - quantity;
+        
+        if (newQuantity <= 0) {
+          // Remove position entirely
+          await supabase
+            .from('portfolio')
+            .delete()
+            .eq('id', existingPortfolio.id);
+        } else {
+          // Update with reduced quantity (price stays the same)
+          await supabase
+            .from('portfolio')
+            .update({
+              quantity: newQuantity
+            })
+            .eq('id', existingPortfolio.id);
+        }
+      }
+    }
+    
+    console.log("Portfolio updated successfully");
+    return true;
+  } catch (error) {
+    console.error('Error updating portfolio:', error);
+    return false;
+  }
+}
+
 // Get real-time stock price from Alpha Vantage
 async function getStockPrice(symbol: string): Promise<number> {
   try {
@@ -224,12 +327,13 @@ async function getStockPrice(symbol: string): Promise<number> {
     const data = await response.json();
     
     if (data['Global Quote'] && data['Global Quote']['05. price']) {
+      console.log(`Alpha Vantage price for ${symbol}: ${data['Global Quote']['05. price']}`);
       return parseFloat(data['Global Quote']['05. price']);
     }
     
     // Fallback to Alpaca API if Alpha Vantage fails
     console.log(`Alpha Vantage failed, falling back to Alpaca API for ${symbol}`);
-    const alpacaResponse = await fetch(`${ALPACA_BASE_URL}/v2/stocks/${symbol}/trades/latest`, {
+    const alpacaResponse = await fetch(`${ALPACA_BASE_URL}/v2/stocks/${symbol}/quotes/latest`, {
       headers: {
         'APCA-API-KEY-ID': ALPACA_API_KEY,
         'APCA-API-SECRET-KEY': ALPACA_SECRET_KEY
@@ -237,11 +341,31 @@ async function getStockPrice(symbol: string): Promise<number> {
     });
     
     const alpacaData = await alpacaResponse.json();
-    if (alpacaData.trade && alpacaData.trade.p) {
-      return alpacaData.trade.p;
+    console.log("Alpaca quotes response:", alpacaData);
+    
+    if (alpacaData && alpacaData.quote && alpacaData.quote.ap) {
+      console.log(`Alpaca price for ${symbol}: ${alpacaData.quote.ap}`);
+      return alpacaData.quote.ap;
+    }
+    
+    // Try one more method with Alpaca trade data
+    const alpacaTradeResponse = await fetch(`${ALPACA_BASE_URL}/v2/stocks/${symbol}/trades/latest`, {
+      headers: {
+        'APCA-API-KEY-ID': ALPACA_API_KEY,
+        'APCA-API-SECRET-KEY': ALPACA_SECRET_KEY
+      }
+    });
+    
+    const alpacaTradeData = await alpacaTradeResponse.json();
+    console.log("Alpaca trade response:", alpacaTradeData);
+    
+    if (alpacaTradeData && alpacaTradeData.trade && alpacaTradeData.trade.p) {
+      console.log(`Alpaca trade price for ${symbol}: ${alpacaTradeData.trade.p}`);
+      return alpacaTradeData.trade.p;
     }
     
     // Default fallback
+    console.log(`Could not get price for ${symbol} from any source`);
     return 0;
   } catch (error) {
     console.error('Error fetching stock price:', error);
@@ -255,6 +379,8 @@ async function getStockInfo(symbol: string) {
     console.log(`Fetching stock info for ${symbol} from Alpha Vantage`);
     const response = await fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`);
     const data = await response.json();
+    
+    console.log(`Alpha Vantage stock info response for ${symbol}:`, data);
     
     if (data.Name) {
       return {
@@ -344,7 +470,7 @@ async function executeTrade(userId: string, symbol: string, quantity: number, si
           symbol: symbol,
           quantity: quantity,
           trade_type: side,
-          price_at_execution: price,
+          price_at_execution: price || 0, // Default to 0 if price is null/undefined
           alpaca_order_id: orderData.id,
           status: orderData.status,
           via_chatbot: true
@@ -355,7 +481,7 @@ async function executeTrade(userId: string, symbol: string, quantity: number, si
       success: tradeResponse.ok,
       orderId: orderData.id,
       status: orderData.status,
-      filledPrice: orderData.filled_avg_price ? parseFloat(orderData.filled_avg_price) : currentPrice,
+      filledPrice: orderData.filled_avg_price ? parseFloat(orderData.filled_avg_price) : currentPrice || 0,
       error: tradeResponse.ok ? null : orderData.message || 'Unknown error'
     };
   } catch (error) {
@@ -387,8 +513,18 @@ async function getPortfolioPositions(apiKey = ALPACA_API_KEY, secretKey = ALPACA
     }
 
     const positions = await positionsResponse.json();
-    console.log(`Retrieved ${positions.length} positions`);
-    return positions;
+    console.log(`Retrieved ${positions.length} positions from Alpaca`);
+    
+    // Make sure all numeric fields are properly formatted
+    return positions.map(pos => ({
+      ...pos,
+      market_value: Number(pos.market_value) || 0,
+      unrealized_pl: Number(pos.unrealized_pl) || 0,
+      avg_entry_price: Number(pos.avg_entry_price) || 0,
+      current_price: Number(pos.current_price) || 0,
+      change_today: Number(pos.change_today) || 0,
+      qty: Number(pos.qty) || 0
+    }));
   } catch (error) {
     console.error('Portfolio fetch error:', error);
     return [];
@@ -434,6 +570,9 @@ serve(async (req) => {
         const tradeResult = await executeTrade(userId, symbol, quantity, side);
         
         if (tradeResult.success) {
+          // Update portfolio in the database
+          await updatePortfolioAfterTrade(userId, symbol, quantity, side, tradeResult.filledPrice);
+          
           // Store trade in Supabase
           const { error } = await supabase
             .from('user_trades')
@@ -457,7 +596,7 @@ serve(async (req) => {
       case 'GET_PORTFOLIO':
         const positions = await getPortfolioPositions();
         
-        // Optional: Store portfolio snapshot
+        // Store portfolio snapshot
         const portfolioValue = positions.reduce((total, pos) => 
           total + (Number(pos.market_value) || 0), 0);
         
@@ -466,7 +605,7 @@ serve(async (req) => {
           .insert({
             user_id: userId,
             portfolio_value: portfolioValue,
-            positions_data: JSON.stringify(positions)
+            positions_data: positions
           });
 
         if (snapshotError) console.error('Portfolio snapshot error:', snapshotError);

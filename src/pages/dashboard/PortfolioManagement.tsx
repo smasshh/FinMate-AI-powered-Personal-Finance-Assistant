@@ -33,10 +33,21 @@ const PortfolioManagement = () => {
   const [quantity, setQuantity] = useState('');
   const [tradeType, setTradeType] = useState<'buy' | 'sell'>('buy');
   const [activeTab, setActiveTab] = useState('holdings');
-
+  
+  // Add refresh interval for portfolio data
   useEffect(() => {
+    // Initial fetch
     fetchPortfolioPositions();
     fetchTradeHistory();
+    
+    // Set up refresh interval (every 60 seconds)
+    const intervalId = setInterval(() => {
+      console.log("Auto-refreshing portfolio data...");
+      fetchPortfolioPositions();
+    }, 60000);
+    
+    // Clear interval on component unmount
+    return () => clearInterval(intervalId);
   }, []);
 
   const handleTrade = async () => {
@@ -88,7 +99,7 @@ const PortfolioManagement = () => {
   const barChartData = portfolioPositions.map(position => ({
     name: position.symbol,
     profit: Number(position.unrealized_pl),
-    fill: Number(position.unrealized_pl) >= 0 ? '#4ade80' : '#ef4444' // Add fill color directly to data
+    color: Number(position.unrealized_pl) >= 0 ? '#4ade80' : '#ef4444'
   }));
 
   // Custom formatter for toFixed to handle ValueType
@@ -166,7 +177,7 @@ const PortfolioManagement = () => {
       <Card>
         <CardHeader className="pb-2">
           <div>
-            <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList>
                 <TabsTrigger value="holdings">Your Holdings</TabsTrigger>
                 <TabsTrigger value="allocation">Asset Allocation</TabsTrigger>
@@ -420,7 +431,7 @@ const PortfolioManagement = () => {
                             <Bar
                               dataKey="profit"
                               name="Profit/Loss"
-                              fill="#8884d8" 
+                              fill="#8884d8"
                               fillOpacity={0.8}
                             />
                           </ReBarChart>

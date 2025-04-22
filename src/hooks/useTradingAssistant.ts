@@ -220,6 +220,8 @@ export const useTradingAssistant = () => {
 
     try {
       console.log("Fetching portfolio positions from edge function");
+      
+      // First, try to get positions from Alpaca via the edge function
       const response = await supabase.functions.invoke('trade-assistant', {
         body: JSON.stringify({
           action: 'GET_PORTFOLIO',
@@ -231,14 +233,73 @@ export const useTradingAssistant = () => {
         throw new Error(response.error.message);
       }
 
-      if (Array.isArray(response.data)) {
+      if (Array.isArray(response.data) && response.data.length > 0) {
         setPortfolioPositions(response.data);
-        console.log("Portfolio positions updated:", response.data);
+        console.log("Portfolio positions updated from Alpaca:", response.data);
         return response.data;
-      } else {
-        console.error("Unexpected portfolio data format:", response.data);
-        return [];
+      } 
+      
+      // If no positions from Alpaca, check our database's portfolio table
+      console.log("No positions from Alpaca, checking database portfolio table");
+      const { data: portfolioData, error: portfolioError } = await supabase
+        .from('portfolio')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (portfolioError) {
+        throw new Error(portfolioError.message);
       }
+      
+      if (portfolioData && portfolioData.length > 0) {
+        // We need to get current prices for these positions
+        const enrichedPortfolio = await Promise.all(portfolioData.map(async (position) => {
+          try {
+            // Get current price from our stock data edge function
+            const priceResponse = await supabase.functions.invoke('stock-data', {
+              body: JSON.stringify({ 
+                action: 'CURRENT_PRICE', 
+                symbol: position.stock_symbol
+              })
+            });
+            
+            const currentPrice = priceResponse.data?.price || position.purchase_price;
+            const marketValue = currentPrice * position.quantity;
+            const unrealizedPL = marketValue - (position.purchase_price * position.quantity);
+            
+            return {
+              symbol: position.stock_symbol,
+              qty: position.quantity,
+              market_value: marketValue,
+              unrealized_pl: unrealizedPL,
+              avg_entry_price: position.purchase_price,
+              current_price: currentPrice,
+              change_today: 0 // Not available from our DB
+            };
+          } catch (e) {
+            console.error(`Error enriching position for ${position.stock_symbol}:`, e);
+            // Return position with estimated data
+            const marketValue = position.purchase_price * position.quantity;
+            return {
+              symbol: position.stock_symbol,
+              qty: position.quantity,
+              market_value: marketValue,
+              unrealized_pl: 0,
+              avg_entry_price: position.purchase_price,
+              current_price: position.purchase_price,
+              change_today: 0
+            };
+          }
+        }));
+        
+        setPortfolioPositions(enrichedPortfolio);
+        console.log("Portfolio positions updated from database:", enrichedPortfolio);
+        return enrichedPortfolio;
+      }
+      
+      // No positions found anywhere
+      console.log("No portfolio positions found");
+      setPortfolioPositions([]);
+      return [];
     } catch (err) {
       console.error('Portfolio fetch error:', err);
       setError(err instanceof Error ? err.message : 'Unable to fetch portfolio');
@@ -276,7 +337,7 @@ export const useTradingAssistant = () => {
         symbol: trade.symbol,
         quantity: trade.quantity,
         trade_type: trade.trade_type === 'buy' ? 'buy' : 'sell',
-        price_at_execution: Number(trade.price_at_execution),
+        price_at_execution: Number(trade.price_at_execution) || 0,
         executed_at: trade.executed_at,
         status: trade.status,
         user_id: trade.user_id,
