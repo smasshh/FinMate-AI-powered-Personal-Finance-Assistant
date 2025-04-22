@@ -44,7 +44,7 @@ interface ExpenseTableProps {
 }
 
 export function ExpenseTable({ onEdit }: ExpenseTableProps) {
-  const { expenses, isLoading } = useExpenses();
+  const { expenses, isLoading, deleteExpense } = useExpenses();
   const { toast } = useToast();
   const [sortField, setSortField] = useState<string>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -96,8 +96,7 @@ export function ExpenseTable({ onEdit }: ExpenseTableProps) {
 
   const handleDelete = async (id: string) => {
     try {
-      // The actual delete function would be implemented in the useExpenses hook
-      // For now, we just show a toast
+      await deleteExpense.mutateAsync(id);
       toast({
         title: "Expense deleted",
         description: "The expense has been successfully deleted.",
