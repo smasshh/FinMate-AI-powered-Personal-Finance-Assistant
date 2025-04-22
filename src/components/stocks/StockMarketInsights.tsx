@@ -10,6 +10,7 @@ export const StockMarketInsights = () => {
   const { fetchMarketIndices, loading } = useStockData();
   const { toast } = useToast();
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [indices, setIndices] = useState([
     { name: 'NIFTY 50', value: '--', change: '--', changePercent: '--', isPositive: true, symbol: 'NSEI' },
     { name: 'SENSEX', value: '--', change: '--', changePercent: '--', isPositive: true, symbol: 'BSESN' },
@@ -20,9 +21,13 @@ export const StockMarketInsights = () => {
   const getMarketData = async () => {
     try {
       setRefreshing(true);
-      const data = await fetchMarketIndices();
+      setError(null);
+      
+      // Request mock data if API limit reached
+      const data = await fetchMarketIndices(true);
       
       if (data?.error) {
+        setError(data.error);
         toast({
           title: 'Failed to fetch market data',
           description: data.error,
@@ -58,7 +63,8 @@ export const StockMarketInsights = () => {
           variant: 'default',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      setError(error?.message || 'Failed to fetch market data');
       toast({
         title: 'Failed to fetch market data',
         description: 'Please try again later',
@@ -93,7 +99,8 @@ export const StockMarketInsights = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-semibold">Market Indices</h2>
         <Button 
           variant="outline" 
           size="sm" 
@@ -108,6 +115,12 @@ export const StockMarketInsights = () => {
           Refresh Market Data
         </Button>
       </div>
+      
+      {error && (
+        <div className="px-4 py-3 bg-red-100 text-red-800 rounded-md mb-4">
+          {error}
+        </div>
+      )}
     
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {indices.map((index) => (

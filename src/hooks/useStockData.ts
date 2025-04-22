@@ -84,7 +84,42 @@ export const useStockData = () => {
           description: newsResponse.data.error,
           variant: 'destructive',
         });
-        return null;
+        
+        // Return mock news data if API limit reached
+        const mockNewsData = {
+          feed: [
+            {
+              title: "Markets rally as technology stocks lead gains",
+              summary: "Major indices closed higher as tech giants posted strong earnings, driving market sentiment upward.",
+              url: "https://example.com/market-news-1",
+              time_published: new Date().toISOString(),
+              ticker_sentiment: [
+                { ticker: "AAPL", relevance_score: 0.8 },
+                { ticker: "MSFT", relevance_score: 0.7 }
+              ]
+            },
+            {
+              title: "Reserve Bank announces policy rate decision",
+              summary: "The central bank kept interest rates unchanged, citing economic stability amid inflation concerns.",
+              url: "https://example.com/market-news-2",
+              time_published: new Date().toISOString(),
+              ticker_sentiment: []
+            },
+            {
+              title: "Indian IT sector shows resilience amid global challenges",
+              summary: "Major IT companies reported better than expected results, showcasing sector strength.",
+              url: "https://example.com/market-news-3",
+              time_published: new Date().toISOString(),
+              ticker_sentiment: [
+                { ticker: "TCS.NS", relevance_score: 0.9 },
+                { ticker: "INFY.NS", relevance_score: 0.8 }
+              ]
+            }
+          ]
+        };
+        
+        setStockNews(mockNewsData);
+        return mockNewsData;
       }
 
       setStockNews(newsResponse.data);
@@ -103,14 +138,14 @@ export const useStockData = () => {
     }
   };
 
-  const fetchMarketIndices = async () => {
+  const fetchMarketIndices = async (useMockData: boolean = false) => {
     setLoading(true);
     setError(null);
     try {
       console.log('Fetching market indices');
       
       const indicesResponse = await supabase.functions.invoke('stock-data', {
-        body: JSON.stringify({ action: 'MARKET_INDICES' })
+        body: JSON.stringify({ action: 'MARKET_INDICES', useMockData })
       });
 
       if (indicesResponse.error) {
@@ -132,7 +167,7 @@ export const useStockData = () => {
           return indicesResponse.data;
         }
         
-        return null;
+        return { error: indicesResponse.data.error };
       }
 
       setMarketIndices(indicesResponse.data);
@@ -145,7 +180,7 @@ export const useStockData = () => {
         description: err.message,
         variant: 'destructive',
       });
-      return null;
+      return { error: err.message };
     } finally {
       setLoading(false);
     }
@@ -247,11 +282,19 @@ export const useStockData = () => {
       if (response.data?.error) {
         console.error(`Error generating prediction:`, response.data.error);
         toast({
-          title: 'Prediction Error',
+          title: 'Prediction Failed',
           description: response.data.error,
           variant: 'destructive',
         });
         return { error: response.data.error };
+      }
+      
+      if (response.data && response.data.success) {
+        toast({
+          title: 'Prediction Generated',
+          description: `Successfully generated prediction for ${symbol}`,
+          variant: 'default',
+        });
       }
       
       return { data: response.data };

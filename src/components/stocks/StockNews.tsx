@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2, RefreshCw } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useStockData } from '@/hooks/useStockData';
 import { Button } from '@/components/ui/button';
@@ -10,22 +10,42 @@ export const StockNews = () => {
   const [activeTab, setActiveTab] = useState('general');
   const { stockNews, loading, fetchStockNews } = useStockData();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
+  // Auto-load news on component mount
   useEffect(() => {
-    // Fetch general market news on component mount
     loadNews();
+    
+    // Setup periodic refresh every 10 minutes
+    const intervalId = setInterval(() => {
+      loadNews(activeTab === 'general' ? undefined : activeTab);
+    }, 10 * 60 * 1000);
+    
+    return () => clearInterval(intervalId);
   }, []);
+  
+  // Reload news when tab changes
+  useEffect(() => {
+    if (activeTab === 'general') {
+      loadNews();
+    } else if (activeTab === 'watchlist') {
+      // Just filter existing news for watchlist
+    }
+  }, [activeTab]);
 
   const loadNews = async (symbol?: string) => {
     setErrorMessage(null);
+    setRefreshing(true);
     try {
       const data = await fetchStockNews(symbol);
       if (!data || data.error) {
         setErrorMessage(data?.error || "Could not fetch news. The API may have reached its quota limit.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading news:", error);
-      setErrorMessage("Failed to load news. Please try again later.");
+      setErrorMessage(error?.message || "Failed to load news. Please try again later.");
+    } finally {
+      setRefreshing(false);
     }
   };
   
@@ -34,7 +54,7 @@ export const StockNews = () => {
       return <p className="text-muted-foreground">No news available</p>;
     }
 
-    return articles.slice(0, 5).map((article: any, index: number) => (
+    return articles.slice(0, 8).map((article: any, index: number) => (
       <div key={index} className="border-b pb-4 last:border-0 mb-4">
         <h3 className="font-semibold mb-2">{article.title}</h3>
         <p className="text-sm text-muted-foreground mb-2">{article.summary}</p>
@@ -88,11 +108,17 @@ export const StockNews = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Financial News</CardTitle>
-        <p className="text-sm text-muted-foreground">Latest market updates and stock-specific news</p>
-        <Button variant="outline" size="sm" className="mt-2" onClick={() => loadNews()} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+      <CardHeader className="flex flex-row justify-between items-start">
+        <div>
+          <CardTitle>Financial News</CardTitle>
+          <p className="text-sm text-muted-foreground">Latest market updates and stock-specific news</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => loadNews()} disabled={refreshing || loading}>
+          {refreshing || loading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
           Refresh News
         </Button>
       </CardHeader>
@@ -104,7 +130,7 @@ export const StockNews = () => {
           </TabsList>
           
           <TabsContent value="general" className="space-y-4">
-            {loading ? (
+            {loading || refreshing ? (
               <div className="flex justify-center items-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
@@ -133,7 +159,7 @@ export const StockNews = () => {
           </TabsContent>
           
           <TabsContent value="watchlist" className="space-y-4">
-            {loading ? (
+            {loading || refreshing ? (
               <div className="flex justify-center items-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
@@ -160,23 +186,3 @@ export const StockNews = () => {
     </Card>
   );
 };
-
-const RefreshCw = ({ className }: { className?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-    <path d="M21 3v5h-5" />
-    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-    <path d="M3 21v-5h5" />
-  </svg>
-);

@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { useStockData } from '@/hooks/useStockData';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Legend, AreaChart, Area 
@@ -18,6 +18,7 @@ export const StockMarketData = () => {
   const [watchlistStocks, setWatchlistStocks] = useState<any[]>([]);
   const [stockData, setStockData] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const { loading, fetchStockData } = useStockData();
   const { user } = useAuth();
 
@@ -47,26 +48,29 @@ export const StockMarketData = () => {
   };
 
   const isIndianStock = (symbol: string) => {
-    return symbol.endsWith('.BSE') || 
-           symbol.endsWith('.NSE') || 
-           symbol.includes('.NS') || 
-           symbol.includes('NIFTY') || 
-           symbol.includes('SENSEX');
+    return symbol?.endsWith('.BSE') || 
+           symbol?.endsWith('.NSE') || 
+           symbol?.includes('.NS') || 
+           symbol?.includes('NIFTY') || 
+           symbol?.includes('SENSEX');
   };
 
   const getCurrencySymbol = (symbol: string) => {
     return isIndianStock(symbol) ? '₹' : '$';
   };
 
-  const fetchStockDataWithRetry = async () => {
+  const fetchStockDataWithRetry = async (retry: boolean = false) => {
     if (!selectedStock) return;
     
     setErrorMessage(null);
+    setIsRetrying(retry);
+    
     const data = await fetchStockData(selectedStock, timeframe);
     
     if (!data) {
       setErrorMessage(`Could not fetch data for ${selectedStock}. The API may have reached its quota limit.`);
       setStockData(null);
+      setIsRetrying(false);
       return;
     }
     
@@ -78,11 +82,27 @@ export const StockMarketData = () => {
     const timeSeries = data[timeSeriesKey] || {};
     
     if (!timeSeries || Object.keys(timeSeries).length === 0) {
-      setErrorMessage(`No data available for ${selectedStock} in the selected timeframe.`);
-      setStockData(null);
+      if (!retry) {
+        // Try again with a different timeframe
+        if (timeframe === 'daily') {
+          setTimeframe('weekly');
+          fetchStockDataWithRetry(true);
+        } else if (timeframe === 'weekly') {
+          setTimeframe('monthly');
+          fetchStockDataWithRetry(true);
+        } else {
+          setErrorMessage(`No data available for ${selectedStock} in any timeframe.`);
+          setStockData(null);
+        }
+      } else {
+        setErrorMessage(`No data available for ${selectedStock} in the selected timeframe.`);
+        setStockData(null);
+      }
+      setIsRetrying(false);
       return;
     }
     
+    // If we got here, we have valid data
     const chartData = Object.entries(timeSeries).map(([date, values]: [string, any]) => ({
       date,
       open: parseFloat(values['1. open']),
@@ -97,10 +117,12 @@ export const StockMarketData = () => {
       timeframe,
       chartData: chartData.slice(-90) // Last 90 data points
     });
+    
+    setIsRetrying(false);
   };
 
   useEffect(() => {
-    if (selectedStock) {
+    if (selectedStock && !isRetrying) {
       fetchStockDataWithRetry();
     }
   }, [selectedStock, timeframe]);
@@ -132,8 +154,11 @@ export const StockMarketData = () => {
 
   return (
     <Card className="h-full">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Market Data</CardTitle>
+        <div className="text-sm text-muted-foreground">
+          {timeframe === 'daily' ? 'Daily' : timeframe === 'weekly' ? 'Weekly' : 'Monthly'} Data
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -144,11 +169,17 @@ export const StockMarketData = () => {
                 <SelectValue placeholder="Select a stock" />
               </SelectTrigger>
               <SelectContent>
-                {watchlistStocks.map((stock) => (
-                  <SelectItem key={stock.stock_symbol} value={stock.stock_symbol}>
-                    {stock.stock_symbol}
+                {watchlistStocks.length > 0 ? (
+                  watchlistStocks.map((stock) => (
+                    <SelectItem key={stock.stock_symbol} value={stock.stock_symbol}>
+                      {stock.stock_symbol}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="no-stocks" disabled>
+                    No stocks in watchlist
                   </SelectItem>
-                ))}
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -166,7 +197,11 @@ export const StockMarketData = () => {
             </Select>
           </div>
           <div className="flex items-end">
-            <Button onClick={fetchStockDataWithRetry} disabled={loading} className="w-full">
+            <Button 
+              onClick={() => fetchStockDataWithRetry()} 
+              disabled={loading || !selectedStock} 
+              className="w-full"
+            >
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Refresh Data
             </Button>
@@ -178,9 +213,24 @@ export const StockMarketData = () => {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : errorMessage ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <p>{errorMessage}</p>
-            <p className="text-sm mt-2">Try selecting a different stock or timeframe.</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <AlertCircle className="h-12 w-12 text-amber-500 mb-4" />
+            <p className="text-muted-foreground">{errorMessage}</p>
+            <div className="mt-6 space-x-2">
+              <Button variant="outline" onClick={() => fetchStockDataWithRetry()}>
+                Try Again
+              </Button>
+              {timeframe !== 'monthly' && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setTimeframe(timeframe === 'daily' ? 'weekly' : 'monthly');
+                  }}
+                >
+                  Try {timeframe === 'daily' ? 'Weekly' : 'Monthly'} Data
+                </Button>
+              )}
+            </div>
           </div>
         ) : stockData?.chartData?.length > 0 ? (
           <div className="space-y-8">
