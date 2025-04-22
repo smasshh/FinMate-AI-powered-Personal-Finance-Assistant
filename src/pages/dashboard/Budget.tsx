@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +22,7 @@ import { useBudgets, BUDGET_CATEGORIES } from '@/hooks/useBudgets';
 import { useToast } from '@/hooks/use-toast';
 import { CircularProgress } from '@/components/dashboard/CircularProgress';
 import { BudgetChart } from '@/components/dashboard/BudgetChart';
+import { cn } from '@/lib/utils';
 
 const Budget = () => {
   const { 

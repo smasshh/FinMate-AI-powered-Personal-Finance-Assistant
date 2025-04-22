@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { 
   Table, 
@@ -29,7 +30,11 @@ import { useExpenses } from '@/hooks/useExpenses';
 import { BUDGET_CATEGORIES } from '@/hooks/useBudgets';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export const ExpenseTable = () => {
+interface ExpenseTableProps {
+  onEdit?: (expense: any) => void;
+}
+
+export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
   const { expenses, isLoading, addExpense, updateExpense, deleteExpense } = useExpenses();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -93,14 +98,18 @@ export const ExpenseTable = () => {
   };
 
   const handleEditClick = (expense: any) => {
-    setExpenseToEdit({
-      id: expense.id,
-      category: expense.category,
-      amount: expense.amount.toString(),
-      date: expense.date,
-      description: expense.description || ''
-    });
-    setIsEditOpen(true);
+    if (onEdit) {
+      onEdit(expense);
+    } else {
+      setExpenseToEdit({
+        id: expense.id,
+        category: expense.category,
+        amount: expense.amount.toString(),
+        date: expense.date,
+        description: expense.description || ''
+      });
+      setIsEditOpen(true);
+    }
   };
 
   const handleDeleteClick = (id: string) => {
