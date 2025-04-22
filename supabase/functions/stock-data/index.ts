@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4"
 
@@ -12,6 +11,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Improved prediction logic with more robust error handling
+function getRecommendation(currentPrice: number, predictedPrice: number, volatility: number) {
+  const percentChange = ((predictedPrice - currentPrice) / currentPrice) * 100;
+  const confidenceScore = Math.max(0, Math.min(1, 1 - volatility * 10));
+  
+  let recommendation = 'HOLD';
+  let riskLevel = 'MEDIUM';
+
+  if (percentChange > 5) {
+    recommendation = 'BUY';
+    riskLevel = confidenceScore > 0.75 ? 'LOW' : 'MEDIUM';
+  } else if (percentChange < -5) {
+    recommendation = 'SELL';
+    riskLevel = confidenceScore > 0.75 ? 'HIGH' : 'MEDIUM';
+  }
+
+  return { 
+    recommendation, 
+    riskLevel, 
+    confidenceScore,
+    percentChange
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -19,19 +42,135 @@ serve(async (req) => {
   }
 
   try {
-    const { action, symbol, keywords, userId } = await req.json()
-    
     // Ensure API key is available
     if (!ALPHA_VANTAGE_API_KEY) {
       return new Response(
         JSON.stringify({ error: "Alpha Vantage API key is not configured" }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
       );
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE ?? SUPABASE_ANON_KEY)
+    const { action, symbol, userId, keywords } = await req.json()
+    
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE)
 
     switch(action) {
+      case 'GENERATE_PREDICTION':
+        if (!userId || !symbol) {
+          return new Response(
+            JSON.stringify({ error: "User ID and Stock Symbol are required" }),
+            { 
+              status: 400, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        }
+
+        try {
+          // Fetch historical prices
+          const dailyResponse = await fetch(
+            `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=full&apikey=${ALPHA_VANTAGE_API_KEY}`
+          );
+          
+          const dailyData = await dailyResponse.json();
+          
+          // Check if we have valid data
+          if (dailyData['Error Message'] || dailyData['Note'] || !dailyData['Time Series (Daily)']) {
+            return new Response(
+              JSON.stringify({ 
+                error: dailyData['Error Message'] || dailyData['Note'] || "No data available",
+                symbol 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            );
+          }
+
+          // Process historical prices
+          const timeSeries = dailyData['Time Series (Daily)'];
+          const dates = Object.keys(timeSeries).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+          
+          if (dates.length < 30) {
+            return new Response(
+              JSON.stringify({ error: "Insufficient historical data", symbol }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            );
+          }
+
+          // Recent prices for analysis (last 30 days)
+          const recentPrices = dates.slice(0, 30).map(date => ({
+            date,
+            close: parseFloat(timeSeries[date]['4. close'])
+          }));
+
+          // Calculate basic prediction metrics
+          const currentPrice = recentPrices[0].close;
+          const prices = recentPrices.map(p => p.close);
+          
+          // Simple moving average prediction
+          const movingAverage = prices.reduce((a, b) => a + b, 0) / prices.length;
+          const predictedPrice = movingAverage;
+
+          // Calculate volatility
+          const variance = prices.reduce((sum, price) => sum + Math.pow(price - movingAverage, 2), 0) / prices.length;
+          const volatility = Math.sqrt(variance) / currentPrice;
+
+          // Get recommendation
+          const predictionResult = getRecommendation(currentPrice, predictedPrice, volatility);
+
+          // Predict 30 days from now
+          const predictionDate = new Date();
+          predictionDate.setDate(predictionDate.getDate() + 30);
+
+          // Store prediction
+          const { error: insertError } = await supabase
+            .from('stock_predictions')
+            .insert({
+              user_id: userId,
+              stock_symbol: symbol,
+              current_price: currentPrice,
+              predicted_price: predictedPrice,
+              confidence_score: predictionResult.confidenceScore,
+              prediction_date: predictionDate.toISOString().split('T')[0],
+              recommendation: predictionResult.recommendation,
+              risk_level: predictionResult.riskLevel,
+              created_at: new Date().toISOString()
+            });
+
+          if (insertError) throw insertError;
+
+          return new Response(JSON.stringify({ 
+            success: true,
+            prediction: {
+              symbol,
+              currentPrice,
+              predictedPrice,
+              confidenceScore: predictionResult.confidenceScore,
+              recommendation: predictionResult.recommendation,
+              riskLevel: predictionResult.riskLevel,
+              predictionDate: predictionDate.toISOString(),
+              percentChange: predictionResult.percentChange
+            }
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+
+        } catch (predictionError) {
+          console.error("Prediction error:", predictionError);
+          return new Response(
+            JSON.stringify({ 
+              error: "Failed to generate prediction", 
+              details: predictionError.message 
+            }),
+            { 
+              status: 500, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        }
+
       case 'DAILY_PRICES':
         const dailyPricesResponse = await fetch(
           `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${ALPHA_VANTAGE_API_KEY}`
@@ -168,119 +307,6 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
 
-      case 'GENERATE_PREDICTION':
-        if (!userId) {
-          return new Response(
-            JSON.stringify({ error: "User ID is required for predictions" }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        try {
-          // Get historical prices for prediction
-          const historicalDataResponse = await fetch(
-            `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${ALPHA_VANTAGE_API_KEY}`
-          );
-          
-          const historicalData = await historicalDataResponse.json();
-          
-          // Check if we have valid data
-          if (historicalData['Error Message'] || historicalData['Note'] || !historicalData['Time Series (Daily)']) {
-            return new Response(
-              JSON.stringify({ 
-                error: historicalData['Error Message'] || historicalData['Note'] || "No data available for this symbol",
-                symbol 
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-            );
-          }
-          
-          // Get current price from the most recent data
-          const timeSeries = historicalData['Time Series (Daily)'] || {};
-          const dates = Object.keys(timeSeries).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-          
-          if (dates.length === 0) {
-            return new Response(
-              JSON.stringify({ error: "No historical data available", symbol }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-            );
-          }
-          
-          const latestDate = dates[0];
-          const currentPrice = parseFloat(timeSeries[latestDate]['4. close']);
-          
-          // Gather recent prices for analysis
-          const recentPrices = dates.slice(0, Math.min(30, dates.length)).map(date => 
-            parseFloat(timeSeries[date]['4. close'])
-          );
-          
-          // Simple prediction algorithm - averaging recent movement trends
-          // Calculate average daily change
-          let avgChange = 0;
-          if (recentPrices.length > 1) {
-            const changes = [];
-            for (let i = 0; i < recentPrices.length - 1; i++) {
-              changes.push((recentPrices[i] - recentPrices[i + 1]) / recentPrices[i + 1]);
-            }
-            avgChange = changes.reduce((a, b) => a + b, 0) / changes.length;
-          }
-          
-          // Predict price for 30 days in the future
-          const predictedPrice = currentPrice * (1 + avgChange * 30);
-          
-          // Calculate volatility (standard deviation / current price)
-          let volatility = 0;
-          if (recentPrices.length > 1) {
-            const mean = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
-            const squaredDiffs = recentPrices.map(price => Math.pow(price - mean, 2));
-            const variance = squaredDiffs.reduce((a, b) => a + b, 0) / recentPrices.length;
-            volatility = Math.sqrt(variance) / currentPrice;
-          }
-          
-          // Confidence score - higher volatility means lower confidence
-          const confidenceScore = Math.max(0, Math.min(1, 1 - volatility * 10));
-          
-          // Calculate prediction date (30 days from today)
-          const today = new Date();
-          const predictionDate = new Date(today);
-          predictionDate.setDate(today.getDate() + 30);
-          
-          // Store the prediction
-          const { error } = await supabase
-            .from('stock_predictions')
-            .insert({
-              user_id: userId,
-              stock_symbol: symbol,
-              current_price: currentPrice,
-              predicted_price: predictedPrice,
-              confidence_score: confidenceScore,
-              prediction_date: predictionDate.toISOString().split('T')[0],
-              created_at: new Date().toISOString()
-            });
-          
-          if (error) throw error;
-          
-          return new Response(JSON.stringify({ 
-            success: true,
-            prediction: {
-              symbol,
-              currentPrice,
-              predictedPrice,
-              confidenceScore,
-              predictionDate: predictionDate.toISOString(),
-              recommendation: getRecommendation(currentPrice, predictedPrice)
-            }
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        } catch (predictionError) {
-          console.error("Prediction error:", predictionError);
-          return new Response(
-            JSON.stringify({ error: "Failed to generate prediction", details: predictionError.message }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-          );
-        }
-
       default:
         return new Response(JSON.stringify({ error: 'Invalid action' }), {
           status: 400,
@@ -290,17 +316,8 @@ serve(async (req) => {
   } catch (error) {
     console.error('Stock data fetch error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 200, // Changed to 200 to prevent client-side errors
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
 })
-
-// Helper function to determine buy/sell/hold recommendation
-function getRecommendation(currentPrice, predictedPrice) {
-  const percentChange = ((predictedPrice - currentPrice) / currentPrice) * 100;
-  
-  if (percentChange > 5) return "BUY";
-  if (percentChange < -5) return "SELL";
-  return "HOLD";
-}
