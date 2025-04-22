@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 const ALPACA_API_KEY = Deno.env.get('ALPACA_API_KEY')!;
 const ALPACA_SECRET_KEY = Deno.env.get('ALPACA_SECRET_KEY')!;
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
+const ALPHA_VANTAGE_API_KEY = Deno.env.get('ALPHA_VANTAGE_API_KEY')!;
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -17,20 +18,25 @@ const corsHeaders = {
 const ALPACA_BASE_URL = 'https://paper-api.alpaca.markets';
 
 // Handle chat messages using Gemini API
-async function processChatMessage(userId: string, message: string) {
+async function processChatMessage(userId: string, message: string, pendingTrade: any = null) {
   console.log(`Processing chat message from user ${userId}: ${message}`);
+  console.log(`Pending trade: ${JSON.stringify(pendingTrade)}`);
   
   try {
     // First, use Gemini to understand the intent and extract trading instructions if any
-    const intent = await extractIntentFromMessage(message);
+    const intent = await extractIntentFromMessage(message, pendingTrade);
     console.log("Extracted intent:", intent);
 
     // If this is a trade instruction, handle it appropriately
     if (intent.type === 'EXECUTE_TRADE' && intent.symbol && intent.quantity) {
       // We'll use a two-step approach here. First respond with a confirmation request.
+      // Get real-time price from Alpha Vantage for better user experience
+      const stockPrice = await getStockPrice(intent.symbol);
+      const estimatedCost = stockPrice * intent.quantity;
+      
       return {
         intent: 'TRADE_CONFIRMATION',
-        messageResponse: `I understand you want to ${intent.side} ${intent.quantity} shares of ${intent.symbol}. Would you like me to execute this trade? Please respond with "Yes" to confirm.`,
+        messageResponse: `I understand you want to ${intent.side} ${intent.quantity} shares of ${intent.symbol}. Current price is $${stockPrice.toFixed(2)}, for an estimated total of $${estimatedCost.toFixed(2)}. Would you like me to execute this trade? Please respond with "Yes" to confirm.`,
         tradeInfo: {
           symbol: intent.symbol,
           quantity: intent.quantity,
@@ -40,36 +46,38 @@ async function processChatMessage(userId: string, message: string) {
     } 
     // If user confirmed a trade, execute it
     else if (intent.type === 'CONFIRM_TRADE' && intent.confirm) {
-      // Fetch the last pending trade info from the database
-      // (In a real implementation, you'd store the pending trade in a session or temporary storage)
+      // Use the pending trade information if available, otherwise try to extract from message
+      const tradeDetails = pendingTrade || {}; 
+      const symbol = tradeDetails.symbol || intent.symbol;
+      const quantity = tradeDetails.quantity || intent.quantity;
+      const side = tradeDetails.side || intent.side;
       
-      // For this demo, we'll assume a simple response
-      if (intent.symbol && intent.quantity && intent.side) {
-        // Execute the trade
-        const tradeResult = await executeTrade(userId, intent.symbol, intent.quantity, intent.side);
-        
-        if (tradeResult.success) {
-          return {
-            intent: 'EXECUTE_TRADE',
-            messageResponse: `✅ Trade executed successfully! I've ${intent.side === 'buy' ? 'bought' : 'sold'} ${intent.quantity} shares of ${intent.symbol} at $${tradeResult.filledPrice} per share.`,
-            tradeInfo: {
-              symbol: intent.symbol,
-              quantity: intent.quantity,
-              side: intent.side
-            }
-          };
-        } else {
-          return {
-            intent: 'ERROR',
-            messageResponse: `❌ Sorry, I couldn't execute your trade: ${tradeResult.error}`
-          };
-        }
+      if (!symbol || !quantity || !side) {
+        return {
+          intent: 'ERROR',
+          messageResponse: "I couldn't find the details of the trade you want to confirm. Please provide the complete trading instructions again."
+        };
       }
       
-      return {
-        intent: 'ERROR',
-        messageResponse: "I couldn't find the details of the trade you want to confirm. Please provide the complete trading instructions again."
-      };
+      // Execute the trade
+      const tradeResult = await executeTrade(userId, symbol, quantity, side);
+      
+      if (tradeResult.success) {
+        return {
+          intent: 'EXECUTE_TRADE',
+          messageResponse: `✅ Trade executed successfully! I've ${side === 'buy' ? 'bought' : 'sold'} ${quantity} shares of ${symbol} at $${tradeResult.filledPrice} per share.`,
+          tradeInfo: {
+            symbol,
+            quantity,
+            side
+          }
+        };
+      } else {
+        return {
+          intent: 'ERROR',
+          messageResponse: `❌ Sorry, I couldn't execute your trade: ${tradeResult.error}`
+        };
+      }
     } 
     // If user asks for portfolio information
     else if (intent.type === 'GET_PORTFOLIO') {
@@ -95,6 +103,23 @@ async function processChatMessage(userId: string, message: string) {
         messageResponse: `📊 Your portfolio contains ${positions.length} positions with a total value of $${totalValue.toFixed(2)} and an unrealized P/L of $${totalPL.toFixed(2)}.${positionsList}`
       };
     }
+    // If user asks for stock information
+    else if (intent.type === 'GET_STOCK_INFO' && intent.symbol) {
+      const stockInfo = await getStockInfo(intent.symbol);
+      if (!stockInfo) {
+        return {
+          intent: 'ERROR',
+          messageResponse: `I couldn't find information for ${intent.symbol}. Please check the symbol and try again.`
+        };
+      }
+      
+      const price = await getStockPrice(intent.symbol);
+      
+      return {
+        intent: 'GET_STOCK_INFO',
+        messageResponse: `📈 **${stockInfo.name} (${intent.symbol})** \n\nCurrent Price: $${price} \n\n${stockInfo.description.substring(0, 300)}...`
+      };
+    }
     // For any other type of message, provide a helpful response
     else {
       // Use Gemini to generate a conversational response
@@ -113,12 +138,24 @@ async function processChatMessage(userId: string, message: string) {
 }
 
 // Extract trading intent from user message using Gemini
-async function extractIntentFromMessage(message: string) {
+async function extractIntentFromMessage(message: string, pendingTrade: any = null) {
+  // For confirming trades with "yes" - use the pending trade
+  if (pendingTrade && /^(yes|confirm|ok|okay|yeah|sure|execute|do it)$/i.test(message.trim())) {
+    return {
+      type: 'CONFIRM_TRADE',
+      confirm: true,
+      symbol: pendingTrade.symbol,
+      quantity: pendingTrade.quantity,
+      side: pendingTrade.side
+    };
+  }
+  
   // Check for simple buy/sell patterns first to avoid unnecessary API calls
   const buyMatch = message.match(/(?:buy|purchase)\s+(\d+)\s+(?:shares?|stocks?)?(?:\s+of)?\s+([A-Z]+)/i);
   const sellMatch = message.match(/(?:sell|exit)\s+(\d+)\s+(?:shares?|stocks?)?(?:\s+of)?\s+([A-Z]+)/i);
   const portfolioMatch = message.match(/(?:portfolio|holdings|positions|what do i own|show me my stocks)/i);
   const confirmMatch = message.match(/(?:yes|confirm|execute|proceed|go ahead|ok|okay)/i);
+  const stockInfoMatch = message.match(/(?:info|information|details|price|about|analyze)\s+(?:stock|ticker|symbol)?\s*([A-Z]+)/i);
   
   // Simple hardcoded pattern matching as a fallback/optimization
   if (buyMatch) {
@@ -139,25 +176,18 @@ async function extractIntentFromMessage(message: string) {
     return {
       type: 'GET_PORTFOLIO'
     };
-  } else if (confirmMatch) {
-    // In a real implementation, you'd retrieve the pending trade from a database or session
-    // For this demo, we'll use a simplified approach
-    const pendingTradeMatch = message.match(/(?:yes|confirm|execute|proceed).*?(?:buy|sell)\s+(\d+)\s+shares\s+of\s+([A-Z]+)/i);
-    
-    if (pendingTradeMatch) {
-      const side = message.includes('sell') ? 'sell' : 'buy';
-      return {
-        type: 'CONFIRM_TRADE',
-        confirm: true,
-        side,
-        quantity: parseInt(pendingTradeMatch[1]),
-        symbol: pendingTradeMatch[2].toUpperCase()
-      };
-    }
-    
+  } else if (confirmMatch && pendingTrade) {
     return {
       type: 'CONFIRM_TRADE',
-      confirm: true
+      confirm: true,
+      symbol: pendingTrade.symbol,
+      quantity: pendingTrade.quantity,
+      side: pendingTrade.side
+    };
+  } else if (stockInfoMatch) {
+    return {
+      type: 'GET_STOCK_INFO',
+      symbol: stockInfoMatch[1].toUpperCase()
     };
   }
 
@@ -175,6 +205,62 @@ async function extractIntentFromMessage(message: string) {
       type: 'GENERAL',
       message: message
     };
+  }
+}
+
+// Get real-time stock price from Alpha Vantage
+async function getStockPrice(symbol: string): Promise<number> {
+  try {
+    const response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`);
+    const data = await response.json();
+    
+    if (data['Global Quote'] && data['Global Quote']['05. price']) {
+      return parseFloat(data['Global Quote']['05. price']);
+    }
+    
+    // Fallback to Alpaca API if Alpha Vantage fails
+    const alpacaResponse = await fetch(`${ALPACA_BASE_URL}/v2/stocks/${symbol}/trades/latest`, {
+      headers: {
+        'APCA-API-KEY-ID': ALPACA_API_KEY,
+        'APCA-API-SECRET-KEY': ALPACA_SECRET_KEY
+      }
+    });
+    
+    const alpacaData = await alpacaResponse.json();
+    if (alpacaData.trade && alpacaData.trade.p) {
+      return alpacaData.trade.p;
+    }
+    
+    // Default fallback
+    return 0;
+  } catch (error) {
+    console.error('Error fetching stock price:', error);
+    return 0;
+  }
+}
+
+// Get detailed stock information from Alpha Vantage
+async function getStockInfo(symbol: string) {
+  try {
+    const response = await fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`);
+    const data = await response.json();
+    
+    if (data.Name) {
+      return {
+        name: data.Name,
+        description: data.Description || `No detailed description available for ${data.Name}`,
+        sector: data.Sector,
+        industry: data.Industry,
+        marketCap: data.MarketCapitalization,
+        peRatio: data.PERatio,
+        dividendYield: data.DividendYield
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching stock info:', error);
+    return null;
   }
 }
 
@@ -216,12 +302,39 @@ async function executeTrade(userId: string, symbol: string, quantity: number, si
     });
 
     const orderData = await tradeResponse.json();
+    
+    // If order is successful, store in Supabase
+    if (tradeResponse.ok) {
+      // Get current price for storing in the trade record
+      const currentPrice = await getStockPrice(symbol);
+      
+      // Create a Supabase client
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!, 
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
+      
+      // Insert trade into the user_trades table
+      await supabase
+        .from('user_trades')
+        .insert({
+          user_id: userId,
+          symbol: symbol,
+          quantity: quantity,
+          trade_type: side,
+          price_at_execution: currentPrice || Number(orderData.filled_avg_price) || 0,
+          alpaca_order_id: orderData.id,
+          status: orderData.status,
+          via_chatbot: true
+        });
+    }
 
     return {
       success: tradeResponse.ok,
       orderId: orderData.id,
       status: orderData.status,
-      filledPrice: orderData.filled_avg_price || 0
+      filledPrice: orderData.filled_avg_price || await getStockPrice(symbol) || 0,
+      error: tradeResponse.ok ? null : orderData.message || 'Unknown error'
     };
   } catch (error) {
     console.error('Trade execution error:', error);
@@ -256,7 +369,7 @@ serve(async (req) => {
   }
 
   try {
-    const { action, userId, symbol, quantity, side, message } = await req.json();
+    const { action, userId, symbol, quantity, side, message, pendingTrade } = await req.json();
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!, 
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -264,7 +377,7 @@ serve(async (req) => {
 
     switch(action) {
       case 'PROCESS_CHAT':
-        const chatResult = await processChatMessage(userId, message);
+        const chatResult = await processChatMessage(userId, message, pendingTrade);
         
         // Store chat in database for history
         const { error: chatError } = await supabase

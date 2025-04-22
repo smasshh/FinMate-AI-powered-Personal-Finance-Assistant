@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RefreshCw, Send, Bot, UserCircle } from 'lucide-react';
+import { RefreshCw, Send, Bot, UserCircle, Check, X } from 'lucide-react';
 import { useTradingAssistant, ChatMessage } from '@/hooks/useTradingAssistant';
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
@@ -20,6 +20,7 @@ const AiTradingAssistant = () => {
     chatMessages,
     chatLoading,
     fetchPortfolioPositions,
+    pendingTrade,
     loading
   } = useTradingAssistant();
 
@@ -33,6 +34,15 @@ const AiTradingAssistant = () => {
     if (inputMessage.trim() === '' || chatLoading) return;
     await sendMessage(inputMessage);
     setInputMessage('');
+  };
+
+  // Handle confirming a trade directly
+  const handleConfirmTrade = async (confirm: boolean) => {
+    if (confirm) {
+      await sendMessage('Yes, confirm this trade');
+    } else {
+      await sendMessage('No, cancel this trade');
+    }
   };
 
   // Handle Enter key press
@@ -53,7 +63,7 @@ const AiTradingAssistant = () => {
     "Buy 5 shares of AAPL",
     "Sell 3 shares of MSFT",
     "Show my portfolio",
-    "How is the market today?"
+    "What's the price of AMZN?"
   ];
 
   // Track which tab is active
@@ -92,8 +102,8 @@ const AiTradingAssistant = () => {
         </div>
       </div>
       
-      <div className="grid grid-cols-4 gap-6">
-        <div className="col-span-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="col-span-1 md:col-span-3">
           <Card className="h-[calc(100vh-240px)]">
             <CardContent className="p-0 flex flex-col h-full">
               <ScrollArea className="flex-grow p-6">
@@ -104,7 +114,7 @@ const AiTradingAssistant = () => {
                     <p className="max-w-md mt-2">
                       Ask me to buy or sell stocks, check your portfolio, or get market information.
                     </p>
-                    <div className="grid grid-cols-2 gap-2 mt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-6">
                       {quickPrompts.map((prompt, index) => (
                         <Button 
                           key={index} 
@@ -144,6 +154,32 @@ const AiTradingAssistant = () => {
                             <div className="text-sm whitespace-pre-wrap">
                               {message.content}
                             </div>
+                            
+                            {/* Trade confirmation buttons */}
+                            {message.role === 'assistant' && 
+                             message.content.includes('Would you like me to execute this trade?') && (
+                              <div className="mt-2 flex space-x-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="default"
+                                  className="bg-green-600 hover:bg-green-700"
+                                  onClick={() => handleConfirmTrade(true)}
+                                >
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Confirm
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="border-red-600 text-red-600 hover:bg-red-100"
+                                  onClick={() => handleConfirmTrade(false)}
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  Cancel
+                                </Button>
+                              </div>
+                            )}
+                            
                             <div className="text-xs opacity-70 mt-1 text-right">
                               {formatMessageTime(message.timestamp)}
                             </div>
@@ -206,22 +242,50 @@ const AiTradingAssistant = () => {
               
               <Separator className="my-4" />
               
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-medium mb-1">Quick Tips</h3>
-                  <ul className="text-sm space-y-2 list-disc pl-4">
-                    <li>Say "Buy [quantity] shares of [symbol]" to purchase stocks</li>
-                    <li>Ask "What's my portfolio value?" to check performance</li>
-                    <li>Request "Show me market news for [symbol]" for updates</li>
-                    <li>Type "Help" for more commands</li>
-                  </ul>
+              {pendingTrade ? (
+                <div className="space-y-4">
+                  <h3 className="font-medium mb-1">Pending Trade</h3>
+                  <div className="bg-muted p-3 rounded-md">
+                    <p className="font-medium">{pendingTrade.side === 'buy' ? 'Buy' : 'Sell'} {pendingTrade.quantity} shares of {pendingTrade.symbol}</p>
+                    <div className="flex space-x-2 mt-2">
+                      <Button 
+                        size="sm" 
+                        className="w-full bg-green-600 hover:bg-green-700"
+                        onClick={() => handleConfirmTrade(true)}
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        Confirm
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="w-full border-red-600 text-red-600 hover:bg-red-100"
+                        onClick={() => handleConfirmTrade(false)}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                
-                <div>
-                  <h3 className="font-medium mb-1">Market Hours</h3>
-                  <p className="text-sm">Trading available 9:30 AM - 4:00 PM ET, Monday-Friday</p>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-medium mb-1">Quick Tips</h3>
+                    <ul className="text-sm space-y-2 list-disc pl-4">
+                      <li>Say "Buy [quantity] shares of [symbol]" to purchase stocks</li>
+                      <li>Ask "What's my portfolio value?" to check performance</li>
+                      <li>Request "Show me market news for [symbol]" for updates</li>
+                      <li>Type "Help" for more commands</li>
+                    </ul>
+                  </div>
+                  
+                  <div>
+                    <h3 className="font-medium mb-1">Market Hours</h3>
+                    <p className="text-sm">Trading available 9:30 AM - 4:00 PM ET, Monday-Friday</p>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>

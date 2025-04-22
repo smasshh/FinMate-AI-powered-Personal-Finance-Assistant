@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +46,11 @@ export const useTradingAssistant = () => {
   const [portfolioPositions, setPortfolioPositions] = useState<PortfolioPosition[]>([]);
   const [tradeHistory, setTradeHistory] = useState<TradeHistory[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [pendingTrade, setPendingTrade] = useState<{
+    symbol: string;
+    quantity: number;
+    side: 'buy' | 'sell';
+  } | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -75,7 +80,8 @@ export const useTradingAssistant = () => {
         body: JSON.stringify({
           action: 'PROCESS_CHAT',
           userId: user.id,
-          message
+          message,
+          pendingTrade: pendingTrade // Pass the pending trade to maintain context
         })
       });
 
@@ -84,6 +90,15 @@ export const useTradingAssistant = () => {
       }
 
       const { messageResponse, intent, tradeInfo } = response.data;
+
+      // If this is confirming a trade, clear the pending trade
+      if (intent === 'EXECUTE_TRADE' && tradeInfo) {
+        setPendingTrade(null);
+      } 
+      // If this is a new trade request, set the pending trade
+      else if (intent === 'TRADE_CONFIRMATION' && tradeInfo) {
+        setPendingTrade(tradeInfo);
+      }
 
       // Add assistant message to chat
       const assistantMessage: ChatMessage = {
@@ -256,7 +271,7 @@ export const useTradingAssistant = () => {
         symbol: trade.symbol,
         quantity: trade.quantity,
         trade_type: trade.trade_type === 'buy' ? 'buy' : 'sell',
-        price_at_execution: trade.price_at_execution,
+        price_at_execution: Number(trade.price_at_execution),
         executed_at: trade.executed_at,
         status: trade.status,
         user_id: trade.user_id,
@@ -293,6 +308,7 @@ export const useTradingAssistant = () => {
     portfolioPositions,
     tradeHistory,
     chatMessages,
+    pendingTrade,
     loading,
     chatLoading,
     error
