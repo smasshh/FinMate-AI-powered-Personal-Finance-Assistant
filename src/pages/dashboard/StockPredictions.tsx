@@ -1,102 +1,86 @@
 
-import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Plus, Search } from 'lucide-react'
-import { useStockData } from '@/hooks/useStockData'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { RefreshCcw } from 'lucide-react';
+import { useStockData } from '@/hooks/useStockData';
+import { StockMarketInsights } from '@/components/stocks/StockMarketInsights';
+import { StockWatchlist } from '@/components/stocks/StockWatchlist';
+import { StockNews } from '@/components/stocks/StockNews';
 
 const StockPredictions = () => {
-  const [stockSymbol, setStockSymbol] = useState('')
-  const { stockPrices, stockNews, loading, fetchStockData, addToWatchlist } = useStockData()
+  const [activeTab, setActiveTab] = useState('watchlist');
+  const { loading, fetchStockData } = useStockData();
 
-  const handleSearch = () => {
-    if (stockSymbol) {
-      fetchStockData(stockSymbol)
-    }
-  }
+  const handleRefresh = () => {
+    // Refresh market data
+    fetchStockData('NIFTY50');
+    fetchStockData('SENSEX');
+    fetchStockData('NIFTYBANK');
+    fetchStockData('NIFTYIT');
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Stock Predictions</h1>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Prediction
-        </Button>
-      </div>
-      
-      <div className="flex space-x-2 mb-4">
-        <Input 
-          placeholder="Enter stock symbol (e.g. AAPL)" 
-          value={stockSymbol}
-          onChange={(e) => setStockSymbol(e.target.value.toUpperCase())}
-        />
-        <Button onClick={handleSearch} disabled={!stockSymbol}>
-          <Search className="mr-2 h-4 w-4" />
-          Search
-        </Button>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Stock Market Insights</h1>
+          <p className="text-muted-foreground">
+            AI-driven stock predictions, market trends, and financial news
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleRefresh} disabled={loading}>
+            <RefreshCcw className="w-4 h-4 mr-2" />
+            Refresh Prices
+          </Button>
+          <Button>Generate Predictions</Button>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Stock Analysis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p>Loading stock data...</p>
-          ) : stockPrices ? (
-            <>
-              <div className="mb-4">
-                <Button onClick={() => addToWatchlist(stockSymbol)}>
-                  Add to Watchlist
-                </Button>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Open</TableHead>
-                    <TableHead>High</TableHead>
-                    <TableHead>Low</TableHead>
-                    <TableHead>Close</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {/* Implement stock price rendering */}
-                </TableBody>
-              </Table>
-            </>
-          ) : (
-            <p>Search for a stock to view its data</p>
-          )}
-        </CardContent>
-      </Card>
+      <StockMarketInsights />
 
-      {/* News Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Stock News</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {stockNews && stockNews.feed ? (
-            stockNews.feed.slice(0, 5).map((article, index) => (
-              <div key={index} className="mb-4 border-b pb-2">
-                <h3 className="font-bold">{article.title}</h3>
-                <p>{article.summary}</p>
-                <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-blue-500">
-                  Read More
-                </a>
-              </div>
-            ))
-          ) : (
-            <p>No news available</p>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-4 h-auto gap-4">
+          <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+          <TabsTrigger value="predictions">AI Predictions</TabsTrigger>
+          <TabsTrigger value="market-data">Market Data</TabsTrigger>
+          <TabsTrigger value="news">Market News</TabsTrigger>
+        </TabsList>
+
+        <div className="mt-6">
+          <TabsContent value="watchlist" className="m-0">
+            <StockWatchlist />
+          </TabsContent>
+          <TabsContent value="predictions" className="m-0">
+            <Card>
+              <CardHeader>
+                <CardTitle>AI-Generated Predictions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                Coming soon: AI-powered stock predictions
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="market-data" className="m-0">
+            <Card>
+              <CardHeader>
+                <CardTitle>Market Data</CardTitle>
+              </CardHeader>
+              <CardContent>
+                Coming soon: Detailed market data and charts
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="news" className="m-0">
+            <StockNews />
+          </TabsContent>
+        </div>
+      </Tabs>
     </div>
-  )
-}
+  );
+};
 
-export default StockPredictions
+export default StockPredictions;
