@@ -9,6 +9,36 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ai_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          intent: string | null
+          message: string
+          parsed_data: Json | null
+          response: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intent?: string | null
+          message: string
+          parsed_data?: Json | null
+          response: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intent?: string | null
+          message?: string
+          parsed_data?: Json | null
+          response?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       budgets: {
         Row: {
           amount: number
@@ -165,6 +195,33 @@ export type Database = {
         }
         Relationships: []
       }
+      portfolio_snapshots: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          portfolio_value: number
+          positions_data: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          id?: string
+          portfolio_value: number
+          positions_data: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          portfolio_value?: number
+          positions_data?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -264,6 +321,45 @@ export type Database = {
           notifications_enabled?: boolean | null
           theme?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_trades: {
+        Row: {
+          alpaca_order_id: string | null
+          executed_at: string
+          id: string
+          price_at_execution: number
+          quantity: number
+          status: string
+          symbol: string
+          trade_type: string
+          user_id: string
+          via_chatbot: boolean
+        }
+        Insert: {
+          alpaca_order_id?: string | null
+          executed_at?: string
+          id?: string
+          price_at_execution: number
+          quantity: number
+          status?: string
+          symbol: string
+          trade_type: string
+          user_id: string
+          via_chatbot?: boolean
+        }
+        Update: {
+          alpaca_order_id?: string | null
+          executed_at?: string
+          id?: string
+          price_at_execution?: number
+          quantity?: number
+          status?: string
+          symbol?: string
+          trade_type?: string
+          user_id?: string
+          via_chatbot?: boolean
         }
         Relationships: []
       }
