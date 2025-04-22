@@ -12,32 +12,98 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { useExpenses } from '@/hooks/useExpenses';
 import { useToast } from '@/hooks/use-toast';
+import { ExpenseTable } from '@/components/expenses/ExpenseTable';
+import { ExpenseVisualizations } from '@/components/expenses/ExpenseVisualizations';
+import { ExpenseInsights } from '@/components/expenses/ExpenseInsights';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+const EXPENSE_CATEGORIES = [
+  "Food",
+  "Transportation",
+  "Housing",
+  "Utilities",
+  "Entertainment",
+  "Healthcare",
+  "Shopping",
+  "Travel",
+  "Education",
+  "Groceries",
+  "Gifts",
+  "Charity",
+  "Other"
+];
+
+const DEFAULT_EXPENSE = {
+  id: '',
+  category: '',
+  amount: '',
+  date: new Date().toISOString().split('T')[0],
+  description: '',
+};
 
 const Expenses = () => {
-  const { expenses, isLoading, addExpense } = useExpenses();
+  const { addExpense, updateExpense } = useExpenses();
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
-  const [newExpense, setNewExpense] = useState({
-    category: '',
-    amount: '',
-    date: new Date().toISOString().split('T')[0],
-    description: '',
-  });
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [formData, setFormData] = useState(DEFAULT_EXPENSE);
+
+  const handleAddClick = () => {
+    setIsEditMode(false);
+    setFormData(DEFAULT_EXPENSE);
+    setIsDialogOpen(true);
+  };
+
+  const handleEditExpense = (expense: any) => {
+    setIsEditMode(true);
+    setFormData({
+      id: expense.id,
+      category: expense.category,
+      amount: expense.amount.toString(),
+      date: expense.date,
+      description: expense.description || '',
+    });
+    setIsDialogOpen(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addExpense.mutateAsync({
-        ...newExpense,
-        amount: parseFloat(newExpense.amount),
-      });
-      setIsOpen(false);
-      toast({
-        title: "Success",
-        description: "Expense added successfully",
-      });
+      if (isEditMode) {
+        await updateExpense.mutateAsync({
+          id: formData.id,
+          category: formData.category,
+          amount: parseFloat(formData.amount),
+          date: formData.date,
+          description: formData.description || undefined,
+        });
+        toast({
+          title: "Success",
+          description: "Expense updated successfully",
+        });
+      } else {
+        await addExpense.mutateAsync({
+          category: formData.category,
+          amount: parseFloat(formData.amount),
+          date: formData.date,
+          description: formData.description || undefined,
+        });
+        toast({
+          title: "Success",
+          description: "Expense added successfully",
+        });
+      }
+      setIsDialogOpen(false);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -47,42 +113,48 @@ const Expenses = () => {
     }
   };
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={handleAddClick}>
               <Plus className="mr-2 h-4 w-4" />
               Add Expense
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add New Expense</DialogTitle>
+              <DialogTitle>{isEditMode ? 'Edit Expense' : 'Add New Expense'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  value={newExpense.category}
-                  onChange={(e) => setNewExpense({ ...newExpense, category: e.target.value })}
+                <Select 
+                  value={formData.category} 
+                  onValueChange={(value) => setFormData({ ...formData, category: value })}
                   required
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPENSE_CATEGORIES.map(category => (
+                      <SelectItem key={category} value={category}>{category}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="amount">Amount</Label>
                 <Input
                   id="amount"
                   type="number"
-                  value={newExpense.amount}
-                  onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
+                  step="0.01"
+                  min="0.01"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   required
                 />
               </div>
@@ -91,44 +163,45 @@ const Expenses = () => {
                 <Input
                   id="date"
                   type="date"
-                  value={newExpense.date}
-                  onChange={(e) => setNewExpense({ ...newExpense, date: e.target.value })}
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   required
                 />
               </div>
               <div>
                 <Label htmlFor="description">Description</Label>
-                <Input
+                <Textarea
                   id="description"
-                  value={newExpense.description}
-                  onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Optional details about this expense"
                 />
               </div>
-              <Button type="submit">Add Expense</Button>
+              <Button type="submit">{isEditMode ? 'Update Expense' : 'Add Expense'}</Button>
             </form>
           </DialogContent>
         </Dialog>
       </div>
       
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Expenses</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {expenses?.map((expense) => (
-              <div key={expense.id} className="flex items-center justify-between border-b pb-4">
-                <div>
-                  <p className="font-medium">{expense.category}</p>
-                  <p className="text-sm text-gray-500">{expense.description}</p>
-                  <p className="text-xs text-gray-400">{new Date(expense.date).toLocaleDateString()}</p>
-                </div>
-                <p className="text-xl font-bold">${expense.amount.toLocaleString()}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="table" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="table">Transactions</TabsTrigger>
+          <TabsTrigger value="visualizations">Analysis</TabsTrigger>
+          <TabsTrigger value="insights">Insights</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="table" className="space-y-6">
+          <ExpenseTable onEdit={handleEditExpense} />
+        </TabsContent>
+
+        <TabsContent value="visualizations" className="space-y-6">
+          <ExpenseVisualizations />
+        </TabsContent>
+
+        <TabsContent value="insights" className="space-y-6">
+          <ExpenseInsights />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
