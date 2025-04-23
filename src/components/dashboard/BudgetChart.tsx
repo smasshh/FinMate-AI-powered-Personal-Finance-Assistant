@@ -1,4 +1,3 @@
-
 import {
   PieChart,
   Pie,
@@ -16,6 +15,15 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+// Format currency in Indian Rupees
+const formatRupees = (amount: number) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(amount);
+};
 
 interface BudgetChartProps {
   categoryData: Array<{
@@ -85,7 +93,7 @@ export const BudgetChart = ({ categoryData, monthlyData }: BudgetChartProps) => 
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${value}`} />
+                  <Tooltip formatter={(value) => formatRupees(Number(value))} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -106,7 +114,7 @@ export const BudgetChart = ({ categoryData, monthlyData }: BudgetChartProps) => 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
-                  <Tooltip formatter={(value) => `$${value}`} />
+                  <Tooltip formatter={(value) => formatRupees(Number(value))} />
                   <Legend />
                   <Bar dataKey="budget" name="Budget" fill="#9b87f5" />
                   <Bar dataKey="spent" name="Spent" fill="#ea384c" />
@@ -130,7 +138,7 @@ export const BudgetChart = ({ categoryData, monthlyData }: BudgetChartProps) => 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
-                  <Tooltip formatter={(value) => `$${value}`} />
+                  <Tooltip formatter={(value) => formatRupees(Number(value))} />
                   <Legend />
                   <Line 
                     type="monotone" 
@@ -168,7 +176,7 @@ export const BudgetChart = ({ categoryData, monthlyData }: BudgetChartProps) => 
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${value}`} />
+                  <Tooltip formatter={(value) => formatRupees(Number(value))} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

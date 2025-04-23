@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, CircleCheck, CircleX, AlertTriangle, CirclePercent } from 'lucide-react';
+import { Plus, CircleCheck, CircleX, AlertTriangle, CirclePercent, TrendingUp, Lightbulb, ArrowRight, DollarSign, PieChart } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,58 @@ import { CircularProgress } from '@/components/dashboard/CircularProgress';
 import { BudgetChart } from '@/components/dashboard/BudgetChart';
 import { cn } from '@/lib/utils';
 
+// Format currency in Indian Rupees
+const formatRupees = (amount: number) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(amount);
+};
+
+// Helper to format recommendations text
+const formatRecommendations = (text: string) => {
+  if (!text) return [];
+
+  // Remove markdown characters and split by newlines
+  const cleaned = text
+    .replace(/[*#]/g, '') // Remove * and # characters
+    .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines
+    .trim();
+
+  // Split into sections
+  const sections = [];
+  let currentSection = { title: 'Budget Recommendations', content: [] };
+
+  cleaned.split('\n').forEach(line => {
+    const trimmedLine = line.trim();
+    
+    if (!trimmedLine) return; // Skip empty lines
+    
+    // Check if this is a section title
+    if (trimmedLine.endsWith(':') && trimmedLine.length < 45) {
+      if (currentSection.content.length > 0) {
+        sections.push({ ...currentSection });
+      }
+      currentSection = { title: trimmedLine.replace(':', ''), content: [] };
+    } else if (trimmedLine.startsWith('1.') || trimmedLine.startsWith('2.') || 
+               trimmedLine.startsWith('3.') || trimmedLine.startsWith('4.')) {
+      // Handle numbered lists by adding them as a new bullet point
+      currentSection.content.push(trimmedLine.replace(/^\d+\.\s*/, '').trim());
+    } else {
+      // Regular content
+      currentSection.content.push(trimmedLine);
+    }
+  });
+
+  // Add the last section
+  if (currentSection.content.length > 0) {
+    sections.push(currentSection);
+  }
+
+  return sections;
+};
+
 const Budget = () => {
   const { 
     budgets, 
@@ -47,6 +100,11 @@ const Budget = () => {
     start_date: '',
     end_date: '',
   });
+
+  // Calculate budget data
+  const budgetProgress = calculateBudgetProgress();
+  const categoryTotals = getCategoryTotals();
+  const monthlyData = getMonthlyData();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,13 +157,12 @@ const Budget = () => {
     }
   };
 
-  const budgetProgress = calculateBudgetProgress();
-  const categoryTotals = getCategoryTotals();
-  const monthlyData = getMonthlyData();
-
   if (isBudgetsLoading) {
     return <div>Loading...</div>;
   }
+
+  // Format the recommendations for better display
+  const formattedRecommendations = aiRecommendations ? formatRecommendations(aiRecommendations) : [];
 
   return (
     <div className="space-y-6">
@@ -213,7 +270,7 @@ const Budget = () => {
         </Card>
       )}
 
-      {aiRecommendations && (
+      {formattedRecommendations.length > 0 && (
         <Card className="border-l-4 border-l-purple-500 shadow-md transition-all duration-300 hover:shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -222,7 +279,37 @@ const Budget = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="whitespace-pre-line">{aiRecommendations}</p>
+            <div className="space-y-6">
+              {formattedRecommendations.map((section, index) => (
+                <div key={index} className="space-y-2">
+                  <div className="flex items-center">
+                    {index === 0 ? (
+                      <TrendingUp className="h-4 w-4 mr-2 text-purple-500" />
+                    ) : index === 1 ? (
+                      <DollarSign className="h-4 w-4 mr-2 text-green-500" />
+                    ) : index === 2 ? (
+                      <Lightbulb className="h-4 w-4 mr-2 text-amber-500" />
+                    ) : (
+                      <PieChart className="h-4 w-4 mr-2 text-blue-500" />
+                    )}
+                    <h3 className="font-medium text-base">{section.title}</h3>
+                  </div>
+                  <div className="pl-6 space-y-2">
+                    {section.content.map((line, i) => (
+                      <div key={i} className="flex items-start">
+                        <div className="shrink-0 mt-1.5 mr-2 bg-slate-100 rounded-full w-1.5 h-1.5"></div>
+                        <p className="text-sm leading-relaxed text-slate-700">{line}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div className="pt-2">
+                <Badge variant="outline" className="text-xs text-muted-foreground">
+                  Powered by Gemini AI
+                </Badge>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -258,15 +345,15 @@ const Budget = () => {
             </CardHeader>
             <CardContent className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold">${budget.amount.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{formatRupees(budget.amount)}</div>
                 <div className={cn(
                   "text-sm",
                   budget.isExceeded ? "text-red-500" : budget.isApproaching ? "text-orange-500" : "text-gray-500"
                 )}>
-                  Spent: ${budget.spent.toLocaleString()}
+                  Spent: {formatRupees(budget.spent)}
                 </div>
                 <div className="text-sm text-gray-500">
-                  Remaining: ${budget.remaining.toLocaleString()}
+                  Remaining: {formatRupees(budget.remaining)}
                 </div>
               </div>
               <CircularProgress 

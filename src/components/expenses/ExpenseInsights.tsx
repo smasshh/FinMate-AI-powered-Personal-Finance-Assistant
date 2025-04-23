@@ -1,8 +1,16 @@
-
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, TrendingUp, TrendingDown, Info } from 'lucide-react';
 import { useExpenses } from '@/hooks/useExpenses';
+
+// Format currency in Indian Rupees
+const formatRupees = (amount: number) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(amount);
+};
 
 export function ExpenseInsights() {
   const { expenses } = useExpenses();
@@ -81,19 +89,19 @@ export function ExpenseInsights() {
           <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
             <span>Highest spending category:</span>
             <span className="font-semibold">
-              {insights.highestCategory.category} (${insights.highestCategory.amount.toFixed(2)})
+              {insights.highestCategory.category} ({formatRupees(insights.highestCategory.amount)})
             </span>
           </div>
         )}
 
         <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
           <span>Current month total:</span>
-          <span className="font-semibold">${insights.monthlyTotal.toFixed(2)}</span>
+          <span className="font-semibold">{formatRupees(insights.monthlyTotal)}</span>
         </div>
 
         <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
           <span>Previous month total:</span>
-          <span className="font-semibold">${insights.previousMonthTotal.toFixed(2)}</span>
+          <span className="font-semibold">{formatRupees(insights.previousMonthTotal)}</span>
         </div>
 
         <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">

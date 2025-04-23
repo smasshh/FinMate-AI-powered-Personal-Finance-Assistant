@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { 
   Table, 
@@ -29,6 +28,7 @@ import { EditIcon, MoreHorizontal, Trash2Icon } from "lucide-react";
 import { useExpenses } from '@/hooks/useExpenses';
 import { BUDGET_CATEGORIES } from '@/hooks/useBudgets';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatRupees } from "@/lib/utils";
 
 interface ExpenseTableProps {
   onEdit?: (expense: any) => void;
@@ -312,7 +312,7 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
             <TableRow key={expense.id}>
               <TableCell>{new Date(expense.date).toLocaleDateString()}</TableCell>
               <TableCell>{expense.category}</TableCell>
-              <TableCell>${expense.amount.toLocaleString()}</TableCell>
+              <TableCell>{formatRupees(expense.amount)}</TableCell>
               <TableCell>{expense.description || '-'}</TableCell>
               <TableCell className="text-right">
                 <DropdownMenu>

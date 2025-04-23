@@ -1,9 +1,17 @@
-
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, LineChart, Line, Legend } from 'recharts';
 import { useExpenses } from '@/hooks/useExpenses';
+
+// Format currency in Indian Rupees
+const formatRupees = (amount: number) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(amount);
+};
 
 // Helper function to group expenses by category
 const groupByCategory = (expenses: any[]) => {
@@ -125,7 +133,7 @@ export function ExpenseVisualizations() {
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => `$${value}`} />
+                <Tooltip formatter={(value) => formatRupees(Number(value))} />
               </PieChart>
             </ResponsiveContainer>
           </TabsContent>
@@ -135,7 +143,7 @@ export function ExpenseVisualizations() {
               <BarChart data={monthlyData}>
                 <XAxis dataKey="name" />
                 <YAxis />
-                <Tooltip formatter={(value) => `$${value}`} />
+                <Tooltip formatter={(value) => formatRupees(Number(value))} />
                 <Bar dataKey="value" fill="#8884d8" />
               </BarChart>
             </ResponsiveContainer>
@@ -146,7 +154,7 @@ export function ExpenseVisualizations() {
               <LineChart data={comparisonData.data}>
                 <XAxis dataKey="day" />
                 <YAxis />
-                <Tooltip formatter={(value) => `$${value}`} />
+                <Tooltip formatter={(value) => formatRupees(Number(value))} />
                 <Legend />
                 <Line type="monotone" dataKey="current" stroke="#8884d8" name="Current Month" />
                 <Line type="monotone" dataKey="previous" stroke="#82ca9d" name="Previous Month" />

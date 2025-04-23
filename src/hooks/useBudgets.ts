@@ -1,8 +1,17 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+
+// Format currency in Indian Rupees
+const formatRupees = (amount: number) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(amount);
+};
 
 // Predefined budget categories
 export const BUDGET_CATEGORIES = [
@@ -25,6 +34,7 @@ export const useBudgets = () => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
+  const previousBudgetProgressRef = useRef<any[]>([]);
 
   const getBudgets = async () => {
     const { data, error } = await supabase
@@ -83,7 +93,7 @@ export const useBudgets = () => {
     },
   });
 
-  const calculateBudgetProgress = () => {
+  const calculateBudgetProgress = useCallback(() => {
     if (!budgets || !expenses) return [];
 
     return budgets.map(budget => {
@@ -97,20 +107,6 @@ export const useBudgets = () => {
       const totalSpent = categoryExpenses.reduce((sum, expense) => sum + expense.amount, 0);
       const progressPercentage = (totalSpent / budget.amount) * 100;
 
-      if (progressPercentage > 85 && progressPercentage < 100) {
-        toast({
-          title: "Budget Warning",
-          description: `You're approaching your ${budget.category} budget limit (${progressPercentage.toFixed(1)}%)`,
-          variant: "destructive",
-        });
-      } else if (progressPercentage >= 100) {
-        toast({
-          title: "Budget Exceeded",
-          description: `You've exceeded your ${budget.category} budget by ${(totalSpent - budget.amount).toLocaleString()} (${progressPercentage.toFixed(1)}%)!`,
-          variant: "destructive",
-        });
-      }
-
       return {
         ...budget,
         spent: totalSpent,
@@ -120,9 +116,38 @@ export const useBudgets = () => {
         isApproaching: progressPercentage > 85 && progressPercentage <= 100
       };
     });
-  };
+  }, [budgets, expenses]);
 
-  const getCategoryTotals = () => {
+  // Handle budget alerts with useEffect
+  const budgetProgress = calculateBudgetProgress();
+  
+  useEffect(() => {
+    if (budgetProgress.length > 0) {
+      // Don't show notifications on first render
+      if (previousBudgetProgressRef.current.length > 0) {
+        budgetProgress.forEach(budget => {
+          const progressPercentage = (budget.spent / budget.amount) * 100;
+          
+          if (progressPercentage > 85 && progressPercentage < 100) {
+            toast({
+              title: "Budget Warning",
+              description: `You're approaching your ${budget.category} budget limit (${progressPercentage.toFixed(1)}%)`,
+              variant: "destructive",
+            });
+          } else if (progressPercentage >= 100) {
+            toast({
+              title: "Budget Exceeded",
+              description: `You've exceeded your ${budget.category} budget by ${formatRupees(budget.spent - budget.amount)} (${progressPercentage.toFixed(1)}%)!`,
+              variant: "destructive",
+            });
+          }
+        });
+      }
+      previousBudgetProgressRef.current = budgetProgress;
+    }
+  }, [budgetProgress]);
+
+  const getCategoryTotals = useCallback(() => {
     if (!budgets || !expenses) return [];
 
     const categorySummary = BUDGET_CATEGORIES.map(category => {
@@ -141,9 +166,9 @@ export const useBudgets = () => {
     }).filter(item => item.budget > 0 || item.spent > 0);
 
     return categorySummary;
-  };
+  }, [budgets, expenses]);
 
-  const getMonthlyData = () => {
+  const getMonthlyData = useCallback(() => {
     if (!expenses) return [];
 
     const last6Months = Array.from({ length: 6 }, (_, i) => {
@@ -183,7 +208,7 @@ export const useBudgets = () => {
         budget: totalBudget
       };
     });
-  };
+  }, [budgets, expenses]);
 
   const getAIRecommendations = async () => {
     if (!user) {
