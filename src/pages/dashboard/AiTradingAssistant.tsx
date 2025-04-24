@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +20,9 @@ const AiTradingAssistant = () => {
     chatLoading,
     fetchPortfolioPositions,
     pendingTrade,
-    loading
+    loading,
+    error,
+    simulationMode
   } = useTradingAssistant();
 
   // Format timestamp to show only time
@@ -58,6 +59,9 @@ const AiTradingAssistant = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  // Track which tab is active
+  const [activeTab, setActiveTab] = useState('chat');
+  
   // Quick prompt buttons
   const quickPrompts = [
     "Buy 5 shares of AAPL",
@@ -65,9 +69,6 @@ const AiTradingAssistant = () => {
     "Show my portfolio",
     "What's the price of AMZN?"
   ];
-
-  // Track which tab is active
-  const [activeTab, setActiveTab] = useState('chat');
 
   return (
     <div className="space-y-6">
@@ -101,6 +102,16 @@ const AiTradingAssistant = () => {
           </Button>
         </div>
       </div>
+      
+      {simulationMode && (
+        <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-800 mb-4">
+          <h3 className="font-medium mb-1">Simulation Mode Active</h3>
+          <p className="text-sm">
+            The Alpaca API connection has failed. All trades will be simulated locally and no real trading will occur.
+            This is a great way to practice without real money!
+          </p>
+        </div>
+      )}
       
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="col-span-1 md:col-span-3">
@@ -233,11 +244,13 @@ const AiTradingAssistant = () => {
         <div className="col-span-1">
           <Card className="h-[calc(100vh-240px)]">
             <CardHeader>
-              <CardTitle>Paper Trading Mode</CardTitle>
+              <CardTitle>Paper Trading Mode {simulationMode ? '(Simulation)' : ''}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-amber-600 dark:text-amber-400">
-                This is a paper trading environment. No real money is being used. Practice trading without risk.
+              <p className={simulationMode ? "text-amber-600 dark:text-amber-400 font-medium" : "text-amber-600 dark:text-amber-400"}>
+                {simulationMode 
+                  ? "Running in local simulation mode due to Alpaca API connection issues. All trades are stored in your local account."
+                  : "This is a paper trading environment. No real money is being used. Practice trading without risk."}
               </p>
               
               <Separator className="my-4" />

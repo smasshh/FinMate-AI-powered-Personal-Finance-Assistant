@@ -1,9 +1,10 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, TrendingUp, RefreshCw, ChevronUp, ChevronDown, BarChart } from 'lucide-react';
 import { useTradingAssistant } from '@/hooks/useTradingAssistant';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Table, 
   TableBody, 
@@ -20,6 +21,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
+// Define portfolio position type for local database
+type LocalPortfolioPosition = {
+  id: string;
+  user_id: string;
+  stock_symbol: string;
+  quantity: number;
+  purchase_price: number;
+  purchase_date: string;
+  current_price?: number;
+  market_value?: number;
+  unrealized_pl?: number;
+}
+
 const PortfolioManagement = () => {
   const { 
     fetchPortfolioPositions, 
@@ -27,28 +41,98 @@ const PortfolioManagement = () => {
     executeTrade, 
     portfolioPositions, 
     tradeHistory,
-    loading 
+    loading,
+    error,
+    simulationMode
   } = useTradingAssistant();
+  const { user } = useAuth();
   const [selectedStock, setSelectedStock] = useState('');
   const [quantity, setQuantity] = useState('');
   const [tradeType, setTradeType] = useState<'buy' | 'sell'>('buy');
   const [activeTab, setActiveTab] = useState('holdings');
+  const [localPortfolio, setLocalPortfolio] = useState<LocalPortfolioPosition[]>([]);
+  const [localLoading, setLocalLoading] = useState(false);
+  
+  // Function to fetch portfolio data directly from Supabase
+  const fetchLocalPortfolio = async () => {
+    if (!user) return;
+    
+    setLocalLoading(true);
+    try {
+      // Fetch portfolio data from Supabase
+      const { data, error } = await supabase
+        .from('portfolio')
+        .select('*')
+        .eq('user_id', user.id);
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Enhance portfolio data with current prices and calculated fields
+      const enhancedPortfolio = await Promise.all((data || []).map(async (position) => {
+        try {
+          // Get current price
+          const priceResponse = await supabase.functions.invoke('stock-data', {
+            body: JSON.stringify({ 
+              action: 'CURRENT_PRICE', 
+              symbol: position.stock_symbol
+            })
+          });
+          
+          const currentPrice = priceResponse.data?.price || position.purchase_price;
+          const marketValue = currentPrice * position.quantity;
+          const unrealizedPL = marketValue - (position.purchase_price * position.quantity);
+          
+          return {
+            ...position,
+            current_price: currentPrice,
+            market_value: marketValue,
+            unrealized_pl: unrealizedPL
+          };
+        } catch (err) {
+          console.error(`Error getting price for ${position.stock_symbol}:`, err);
+          
+          // Return with estimated values
+          return {
+            ...position,
+            current_price: position.purchase_price,
+            market_value: position.purchase_price * position.quantity,
+            unrealized_pl: 0
+          };
+        }
+      }));
+      
+      setLocalPortfolio(enhancedPortfolio);
+    } catch (err) {
+      console.error('Error fetching portfolio:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch portfolio data',
+        variant: 'destructive'
+      });
+    } finally {
+      setLocalLoading(false);
+    }
+  };
   
   // Add refresh interval for portfolio data
   useEffect(() => {
-    // Initial fetch
+    // Initial fetch - try both methods
     fetchPortfolioPositions();
     fetchTradeHistory();
+    fetchLocalPortfolio();
     
     // Set up refresh interval (every 60 seconds)
     const intervalId = setInterval(() => {
       console.log("Auto-refreshing portfolio data...");
       fetchPortfolioPositions();
+      fetchLocalPortfolio();
     }, 60000);
     
     // Clear interval on component unmount
     return () => clearInterval(intervalId);
-  }, []);
+  }, [user]);
 
   const handleTrade = async () => {
     if (!selectedStock || !quantity) {
@@ -70,15 +154,40 @@ const PortfolioManagement = () => {
       // Reset form
       setSelectedStock('');
       setQuantity('');
+      
+      // Refresh portfolio data
+      toast({
+        title: 'Refreshing Data',
+        description: 'Updating portfolio with recent trade...',
+        variant: 'default'
+      });
+      
+      // Set a small timeout to allow the database to update
+      setTimeout(async () => {
+        await fetchLocalPortfolio();
+        await fetchTradeHistory();
+      }, 1000);
     }
   };
 
-  const totalPortfolioValue = portfolioPositions.reduce(
+  // Decide which portfolio data to use
+  const displayPortfolio = simulationMode || localPortfolio.length > 0 
+    ? localPortfolio.map(pos => ({
+        symbol: pos.stock_symbol,
+        qty: pos.quantity,
+        avg_entry_price: pos.purchase_price,
+        current_price: pos.current_price || pos.purchase_price,
+        market_value: pos.market_value || (pos.quantity * pos.purchase_price),
+        unrealized_pl: pos.unrealized_pl || 0
+      }))
+    : portfolioPositions;
+
+  const totalPortfolioValue = displayPortfolio.reduce(
     (total, position) => total + Number(position.market_value || 0), 
     0
   );
 
-  const totalCost = portfolioPositions.reduce(
+  const totalCost = displayPortfolio.reduce(
     (total, position) => total + (Number(position.avg_entry_price) * Number(position.qty)), 
     0
   );
@@ -87,7 +196,7 @@ const PortfolioManagement = () => {
   const percentChange = totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0;
 
   // Data for pie chart
-  const pieChartData = portfolioPositions.map(position => ({
+  const pieChartData = displayPortfolio.map(position => ({
     name: position.symbol,
     value: Number(position.market_value)
   }));
@@ -96,7 +205,7 @@ const PortfolioManagement = () => {
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d'];
 
   // Data for bar chart
-  const barChartData = portfolioPositions.map(position => ({
+  const barChartData = displayPortfolio.map(position => ({
     name: position.symbol,
     profit: Number(position.unrealized_pl),
     color: Number(position.unrealized_pl) >= 0 ? '#4ade80' : '#ef4444'
@@ -125,13 +234,24 @@ const PortfolioManagement = () => {
           onClick={() => {
             fetchPortfolioPositions();
             fetchTradeHistory();
+            fetchLocalPortfolio();
           }}
-          disabled={loading}
+          disabled={loading || localLoading}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh Data
         </Button>
       </div>
+      
+      {simulationMode && (
+        <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-800 mb-4">
+          <h3 className="font-medium mb-1">Simulation Mode Active</h3>
+          <p className="text-sm">
+            The Alpaca API connection has failed. All trades will be simulated locally with no real money.
+            Your portfolio data is stored locally in your account.
+          </p>
+        </div>
+      )}
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
@@ -166,9 +286,9 @@ const PortfolioManagement = () => {
             <CardTitle className="text-sm font-medium">Holdings</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{portfolioPositions.length}</div>
+            <div className="text-3xl font-bold">{displayPortfolio.length}</div>
             <div className="text-xs mt-1 text-muted-foreground">
-              📋 {portfolioPositions.length} positions tracked
+              📋 {displayPortfolio.length} positions tracked
             </div>
           </CardContent>
         </Card>
@@ -189,9 +309,9 @@ const PortfolioManagement = () => {
         <CardContent>
           {activeTab === "holdings" && (
             <div>
-              {loading ? (
+              {(loading || localLoading) ? (
                 <p>Loading portfolio...</p>
-              ) : portfolioPositions.length === 0 ? (
+              ) : displayPortfolio.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-muted-foreground mb-4">You don't have any holdings yet.</p>
                   <Dialog>
@@ -233,7 +353,7 @@ const PortfolioManagement = () => {
                         />
                         <Button 
                           onClick={handleTrade} 
-                          disabled={loading}
+                          disabled={loading || localLoading}
                           className="w-full"
                         >
                           Execute Trade
@@ -258,7 +378,7 @@ const PortfolioManagement = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {portfolioPositions.map((position) => (
+                        {displayPortfolio.map((position) => (
                           <TableRow key={position.symbol}>
                             <TableCell className="font-medium">{position.symbol}</TableCell>
                             <TableCell>{position.qty}</TableCell>
@@ -309,9 +429,10 @@ const PortfolioManagement = () => {
                                         executeTrade(position.symbol, Number(quantity), tradeType)
                                           .then(() => {
                                             setQuantity('');
+                                            fetchLocalPortfolio();
                                           });
                                       }} 
-                                      disabled={loading}
+                                      disabled={loading || localLoading}
                                       className="w-full"
                                     >
                                       Execute Trade
@@ -365,7 +486,7 @@ const PortfolioManagement = () => {
                           />
                           <Button 
                             onClick={handleTrade} 
-                            disabled={loading}
+                            disabled={loading || localLoading}
                             className="w-full"
                           >
                             Execute Trade
@@ -381,7 +502,7 @@ const PortfolioManagement = () => {
           
           {activeTab === "allocation" && (
             <div>
-              {portfolioPositions.length === 0 ? (
+              {displayPortfolio.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-muted-foreground">You need some holdings to view asset allocation.</p>
                 </div>
