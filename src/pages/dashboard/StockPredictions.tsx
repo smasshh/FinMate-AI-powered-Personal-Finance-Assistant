@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,8 +18,8 @@ const StockPredictions = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Fetch market indices on load
-    fetchMarketIndices();
+    // Fetch market indices on load with mock data enabled
+    fetchMarketIndices(true);
   }, []);
 
   const handleRefresh = async () => {
@@ -30,8 +29,8 @@ const StockPredictions = () => {
     });
     
     try {
-      // Refresh market indices
-      await fetchMarketIndices();
+      // Refresh market indices with mock data enabled
+      await fetchMarketIndices(true);
       
       // Refresh market news
       await fetchStockNews();

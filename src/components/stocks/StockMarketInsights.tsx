@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { TrendingUp, TrendingDown, Loader2, RefreshCcw } from 'lucide-react';
@@ -6,16 +5,24 @@ import { useStockData } from '@/hooks/useStockData';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
+interface MarketIndex {
+  symbol: string;
+  price: string;
+  change: string;
+  changePercent: string;
+  isPositive: boolean;
+}
+
 export const StockMarketInsights = () => {
   const { fetchMarketIndices, loading } = useStockData();
   const { toast } = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [indices, setIndices] = useState([
-    { name: 'NIFTY 50', value: '--', change: '--', changePercent: '--', isPositive: true, symbol: 'NSEI' },
-    { name: 'SENSEX', value: '--', change: '--', changePercent: '--', isPositive: true, symbol: 'BSESN' },
-    { name: 'NIFTY MIDCAP', value: '--', change: '--', changePercent: '--', isPositive: true, symbol: 'NIFMDCP50.NS' },
-    { name: 'NIFTY IT', value: '--', change: '--', changePercent: '--', isPositive: true, symbol: 'NIFTY_IT.NS' },
+  const [indices, setIndices] = useState<MarketIndex[]>([
+    { symbol: 'NSEI', price: '--', change: '--', changePercent: '--', isPositive: true },
+    { symbol: 'BSESN', price: '--', change: '--', changePercent: '--', isPositive: true },
+    { symbol: 'NIFMDCP50.NS', price: '--', change: '--', changePercent: '--', isPositive: true },
+    { symbol: 'NIFTY_IT.NS', price: '--', change: '--', changePercent: '--', isPositive: true },
   ]);
 
   const getMarketData = async () => {
@@ -23,54 +30,26 @@ export const StockMarketInsights = () => {
       setRefreshing(true);
       setError(null);
       
-      // Request mock data if API limit reached
-      const data = await fetchMarketIndices(true);
+      const data = await fetchMarketIndices();
       
-      if (data?.error) {
-        setError(data.error);
-        toast({
-          title: 'Failed to fetch market data',
-          description: data.error,
-          variant: 'destructive',
-        });
-        return;
+      if (!data || !data.indices) {
+        throw new Error('Failed to fetch market data: Invalid response format');
       }
       
-      if (data && data.indices && data.indices.length > 0) {
-        // Map the fetched indices to our display format
-        const updatedIndices = [...indices];
-        
-        data.indices.forEach(idx => {
-          const indexToUpdate = updatedIndices.findIndex(i => i.symbol === idx.symbol);
-          if (indexToUpdate !== -1) {
-            const price = parseFloat(idx.price);
-            const changeVal = parseFloat(idx.change);
-            
-            updatedIndices[indexToUpdate] = {
-              ...updatedIndices[indexToUpdate],
-              value: price.toFixed(2),
-              change: changeVal.toFixed(2),
-              changePercent: idx.changePercent,
-              isPositive: idx.isPositive
-            };
-          }
-        });
-        
-        setIndices(updatedIndices);
-        toast({
-          title: 'Market data updated',
-          description: 'The latest market data has been fetched',
-          variant: 'default',
-        });
-      }
+      setIndices(data.indices);
+      toast({
+        title: 'Market data updated',
+        description: 'The latest market data has been fetched',
+        variant: 'default',
+      });
     } catch (error: any) {
+      console.error('Error fetching market data:', error);
       setError(error?.message || 'Failed to fetch market data');
       toast({
         title: 'Failed to fetch market data',
-        description: 'Please try again later',
+        description: error?.message || 'Please try again later',
         variant: 'destructive',
       });
-      console.error('Error fetching market data:', error);
     } finally {
       setRefreshing(false);
     }
@@ -124,10 +103,15 @@ export const StockMarketInsights = () => {
     
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {indices.map((index) => (
-          <Card key={index.name}>
+          <Card key={index.symbol}>
             <CardContent className="p-6">
               <div className="space-y-2">
-                <h3 className="text-sm font-medium text-muted-foreground">{index.name}</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  {index.symbol === 'NSEI' ? 'NIFTY 50' :
+                   index.symbol === 'BSESN' ? 'SENSEX' :
+                   index.symbol === 'NIFMDCP50.NS' ? 'NIFTY MIDCAP' :
+                   'NIFTY IT'}
+                </h3>
                 {loading || refreshing ? (
                   <div className="flex items-center space-x-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -135,7 +119,7 @@ export const StockMarketInsights = () => {
                   </div>
                 ) : (
                   <>
-                    <div className="text-2xl font-bold">₹{formatValue(index.value)}</div>
+                    <div className="text-2xl font-bold">₹{formatValue(index.price)}</div>
                     <div className={`flex items-center text-sm ${
                       index.isPositive ? 'text-green-500' : 'text-red-500'
                     }`}>

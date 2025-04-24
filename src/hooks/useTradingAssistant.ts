@@ -206,8 +206,7 @@ export const useTradingAssistant = () => {
               .from('portfolio')
               .update({
                 quantity: newQuantity,
-                purchase_price: newAvgPrice,
-                updated_at: new Date().toISOString()
+                purchase_price: newAvgPrice
               })
               .eq('id', existingPosition.id);
               
@@ -234,7 +233,7 @@ export const useTradingAssistant = () => {
               stock_symbol: pendingTrade.symbol,
               quantity: pendingTrade.quantity,
               purchase_price: price,
-              purchase_date: new Date().toISOString()
+              purchase_date: new Date().toISOString().split('T')[0] // Use only the date part
             });
             
           if (insertError) {
@@ -419,8 +418,7 @@ export const useTradingAssistant = () => {
                 .from('portfolio')
                 .update({
                   quantity: newQuantity,
-                  purchase_price: newAvgPrice,
-                  updated_at: new Date().toISOString()
+                  purchase_price: newAvgPrice
                 })
                 .eq('id', existingPosition.id);
                 
@@ -447,7 +445,7 @@ export const useTradingAssistant = () => {
                 stock_symbol: symbol,
                 quantity: quantity,
                 purchase_price: price,
-                purchase_date: new Date().toISOString()
+                purchase_date: new Date().toISOString().split('T')[0] // Use only the date part
               });
               
             if (insertError) {
@@ -680,8 +678,7 @@ export const useTradingAssistant = () => {
             .from('portfolio')
             .update({
               quantity: position.qty,
-              purchase_price: position.avg_entry_price,
-              updated_at: new Date().toISOString()
+              purchase_price: position.avg_entry_price
             })
             .eq('id', existingPosition.id);
         } else {
@@ -693,7 +690,7 @@ export const useTradingAssistant = () => {
               stock_symbol: position.symbol,
               quantity: position.qty,
               purchase_price: position.avg_entry_price,
-              purchase_date: new Date().toISOString()
+              purchase_date: new Date().toISOString().split('T')[0] // Use only the date part for consistency
             });
         }
       }

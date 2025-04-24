@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -142,45 +141,35 @@ export const useStockData = () => {
     setLoading(true);
     setError(null);
     try {
-      console.log('Fetching market indices');
-      
-      const indicesResponse = await supabase.functions.invoke('stock-data', {
-        body: JSON.stringify({ action: 'MARKET_INDICES', useMockData })
+      console.log('Fetching market indices with mock data:', useMockData);
+      const response = await supabase.functions.invoke('stock-data', {
+        body: JSON.stringify({
+          action: 'MARKET_INDICES',
+          useMockData: false // Always use real data
+        })
       });
 
-      if (indicesResponse.error) {
-        console.error(`Error from Supabase function:`, indicesResponse.error);
-        throw new Error(indicesResponse.error.message);
-      }
-      
-      if (indicesResponse.data?.error) {
-        console.error(`Error from Alpha Vantage:`, indicesResponse.data.error);
-        toast({
-          title: 'API Limit Notice',
-          description: indicesResponse.data.error,
-          variant: 'destructive',
-        });
-        
-        // In case of API limit error, still return partial data if available
-        if (indicesResponse.data.indices && indicesResponse.data.indices.length > 0) {
-          setMarketIndices(indicesResponse.data);
-          return indicesResponse.data;
-        }
-        
-        return { error: indicesResponse.data.error };
+      if (response.error) {
+        console.error('Error from Supabase function:', response.error);
+        throw response.error;
       }
 
-      setMarketIndices(indicesResponse.data);
-      return indicesResponse.data;
-    } catch (err: any) {
-      console.error(`Error in fetchMarketIndices:`, err);
-      setError(err);
-      toast({
-        title: 'Error fetching market indices',
-        description: err.message,
-        variant: 'destructive',
-      });
-      return { error: err.message };
+      if (response.data?.error) {
+        console.error('Error in response:', response.data.error);
+        throw new Error(response.data.error);
+      }
+
+      if (!response.data || !response.data.indices) {
+        throw new Error('Invalid response format from market indices API');
+      }
+
+      console.log('Market indices data received:', response.data.indices);
+      setMarketIndices(response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching market indices:', error);
+      setError(error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -253,59 +242,36 @@ export const useStockData = () => {
 
   const generatePrediction = async (symbol: string) => {
     if (!user) {
-      setError(new Error('You must be logged in to generate predictions'));
-      toast({
-        title: 'Authentication required',
-        description: 'You must be logged in to generate predictions',
-        variant: 'destructive',
-      });
-      return { error: 'You must be logged in to generate predictions' };
+      throw new Error('User must be logged in to generate predictions');
     }
-    
+
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      console.log(`Generating prediction for ${symbol} for user ${user.id}`);
-      
+      console.log('Generating prediction for:', symbol);
       const response = await supabase.functions.invoke('stock-data', {
-        body: JSON.stringify({ 
-          action: 'GENERATE_PREDICTION', 
+        body: JSON.stringify({
+          action: 'GENERATE_PREDICTION',
           symbol,
           userId: user.id
         })
       });
 
       if (response.error) {
-        console.error(`Error from Supabase function:`, response.error);
-        throw new Error(response.error.message);
+        console.error('Error generating prediction:', response.error);
+        throw response.error;
       }
-      
+
       if (response.data?.error) {
-        console.error(`Error generating prediction:`, response.data.error);
-        toast({
-          title: 'Prediction Failed',
-          description: response.data.error,
-          variant: 'destructive',
-        });
-        return { error: response.data.error };
+        console.error('Error in response:', response.data.error);
+        throw new Error(response.data.error);
       }
-      
-      if (response.data && response.data.success) {
-        toast({
-          title: 'Prediction Generated',
-          description: `Successfully generated prediction for ${symbol}`,
-          variant: 'default',
-        });
-      }
-      
-      return { data: response.data };
-    } catch (err: any) {
-      console.error('Error generating prediction:', err);
-      toast({
-        title: 'Error generating prediction',
-        description: err.message,
-        variant: 'destructive',
-      });
-      return { error: err.message };
+
+      return response.data;
+    } catch (error) {
+      console.error('Error generating prediction:', error);
+      setError(error);
+      throw error;
     } finally {
       setLoading(false);
     }
